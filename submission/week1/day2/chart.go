@@ -39,6 +39,7 @@ var stageOrder = []struct {
 	{"validate", "2. validate — чи правильна ФОРМА аргументів"},
 	{"repair", "3. repair — чи можна виправити БЕЗПЕЧНО"},
 	{"lookup", "4. lookup — чи існує це в джерелі"},
+	{"output", "5. output — чи можна довіряти ВІДПОВІДІ джерела"},
 }
 
 // RenderFaultsSVG малює результати fault injection.

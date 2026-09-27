@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -249,6 +250,10 @@ type faultScenario struct {
 	Name string `json:"name"`
 	Why  string `json:"why"`
 	Raw  string `json:"raw_arguments"`
+	// Provider підміняє джерело для цього сценарію. nil — звичайна фікстура.
+	// Потрібен там, де ламається не ВХІД, а ВИХІД: аргументи бездоганні, а
+	// провайдер повертає значення поза контрактом.
+	Provider Provider `json:"-"`
 }
 
 // faultScenarios — навмисно невалідні виклики.
@@ -263,17 +268,38 @@ type faultScenario struct {
 // Плутати їх дорого: помилка рівня домену, подана як «bad request», відправляє
 // модель виправляти тип замість значення.
 var faultScenarios = []faultScenario{
-	{"malformed-json", "рівень JSON: текст обірваний", `{"base": "USD", "target":`},
-	{"wrong-type", "рівень схеми: число там, де рядок", `{"base": 840, "target": "UAH"}`},
-	{"unknown-field", "рівень схеми: поле, якого немає в контракті", `{"base":"USD","target":"UAH","currency":"EUR"}`},
-	{"missing-field", "рівень схеми: обов'язкове поле відсутнє", `{"base": "USD"}`},
-	{"bad-code-shape", "рівень домену: валідний JSON, невалідний код", `{"base": "US1", "target": "UAH"}`},
-	{"unknown-currency", "рівень домену: форма правильна, валюти немає", `{"base": "XQZ", "target": "UAH"}`},
-	{"lowercase", "нормалізація: регістр — не помилка", `{"base": "usd", "target": "uah"}`},
-	{"alias", "ремонт: однозначний синонім валюти", `{"base": "євро", "target": "UAH"}`},
-	{"ambiguous-alias", "домен: «долар» — їх багато, ремонт НЕБЕЗПЕЧНИЙ", `{"base": "долар", "target": "UAH"}`},
-	{"range-overflow", "ремонт: діапазон підрізається до стелі", `{"base":"USD","target":"UAH","history_days":365}`},
-	{"happy-path", "контроль: валідний виклик мусить пройти", `{"base":"USD","target":"UAH","history_days":2}`},
+	{"malformed-json", "рівень JSON: текст обірваний", `{"base": "USD", "target":`, nil},
+	{"wrong-type", "рівень схеми: число там, де рядок", `{"base": 840, "target": "UAH"}`, nil},
+	{"unknown-field", "рівень схеми: поле, якого немає в контракті", `{"base":"USD","target":"UAH","currency":"EUR"}`, nil},
+	{"missing-field", "рівень схеми: обов'язкове поле відсутнє", `{"base": "USD"}`, nil},
+	{"bad-code-shape", "рівень домену: валідний JSON, невалідний код", `{"base": "US1", "target": "UAH"}`, nil},
+	{"unknown-currency", "рівень домену: форма правильна, валюти немає", `{"base": "XQZ", "target": "UAH"}`, nil},
+	{"lowercase", "нормалізація: регістр — не помилка", `{"base": "usd", "target": "uah"}`, nil},
+	{"alias", "ремонт: однозначний синонім валюти", `{"base": "євро", "target": "UAH"}`, nil},
+	{"ambiguous-alias", "домен: «долар» — їх багато, ремонт НЕБЕЗПЕЧНИЙ", `{"base": "долар", "target": "UAH"}`, nil},
+	{"range-overflow", "ремонт: діапазон підрізається до стелі", `{"base":"USD","target":"UAH","history_days":365}`, nil},
+	{"happy-path", "контроль: валідний виклик мусить пройти", `{"base":"USD","target":"UAH","history_days":2}`, nil},
+}
+
+// unknownEnumScenario — вихід, а не вхід.
+//
+// Аргументи тут бездоганні; поза контрактом виявляється ВІДПОВІДЬ джерела:
+// source.kind = "аpi" з КИРИЛИЧНОЮ «а». Такий рядок проходить будь-яку
+// перевірку «це непорожній текст» і ламається мовчки через тиждень.
+//
+// Це третій напрямок межі, і саме він робить її двосторонньою — те саме
+// правило, що в MCP: сервер валідує вхід ДО виконання й санітизує вихід ПІСЛЯ.
+// Поки провайдер свій, здається, що це параноя. Щойно він стає чужим
+// MCP-сервером, це єдине, що стоїть між вами й значенням, якого ви не чекали.
+var unknownEnumScenario = faultScenario{
+	Name: "unknown-enum",
+	Why:  "вихід: джерело повернуло значення поза enum",
+	Raw:  `{"base":"USD","target":"UAH"}`,
+	Provider: &FixtureProvider{
+		Rates:        map[string]float64{"USD": 44.6743},
+		Date:         "2026-09-28",
+		KindOverride: "аpi", // кирилична «а» — омоглиф
+	},
 }
 
 // faultOutcome — що межа зробила зі сценарієм.
@@ -287,14 +313,19 @@ type faultOutcome struct {
 
 // runFaults проганяє сценарії через ту саму межу, що й справжні виклики.
 func runFaults(outDir string) error {
-	outcomes := make([]faultOutcome, 0, len(faultScenarios))
+	outcomes := make([]faultOutcome, 0, len(faultScenarios)+1)
 	// Фікстура, а не живий НБУ: fault injection має давати ОДНАКОВИЙ результат
 	// у будь-який день і без мережі. Прогін проти живого джерела, який у
 	// вихідні дає інший набір вердиктів, — це не тест, а лотерея.
 	p := fixture()
+	scenarios := append(append([]faultScenario{}, faultScenarios...), unknownEnumScenario)
 
-	for _, sc := range faultScenarios {
+	for _, sc := range scenarios {
 		out := faultOutcome{Scenario: sc}
+		use := Provider(p)
+		if sc.Provider != nil {
+			use = sc.Provider
+		}
 
 		in, err := DecodeArgs([]byte(sc.Raw))
 		if err != nil {
@@ -315,10 +346,16 @@ func runFaults(outDir string) error {
 		// джерело, і це окремий, ТРЕТІЙ рівень межі. Без цього кроку сценарій
 		// XQZ виглядав би як «межа пропустила неіснуючу валюту», хоча насправді
 		// її ловить наступний рівень — і ловить із підказкою для моделі.
-		_, lookupErr := Quote(context.Background(), p, res.Input)
+		_, lookupErr := Quote(context.Background(), use, res.Input)
 		switch {
 		case lookupErr != nil:
-			out.Stage, out.Verdict, out.Message = "lookup", "rejected", lookupErr.Error()
+			// Помилка ВИХОДУ (санітизація) і помилка ПОШУКУ — різні рівні:
+			// перша каже «джерело збрехало», друга — «такого немає».
+			stage := "lookup"
+			if errors.Is(lookupErr, ErrUpstream) && strings.Contains(lookupErr.Error(), "source.kind") {
+				stage = "output"
+			}
+			out.Stage, out.Verdict, out.Message = stage, "rejected", lookupErr.Error()
 		case res.Repaired:
 			out.Stage, out.Verdict = "repair", "repaired"
 			out.Message = fmt.Sprintf("%s → base=%s target=%s history_days=%d",

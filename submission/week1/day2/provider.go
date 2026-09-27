@@ -213,13 +213,24 @@ type FixtureProvider struct {
 	Date    string
 	History map[string]map[string]float64 // code → YYYY-MM-DD → rate
 	Err     error
+	// KindOverride підміняє походження, щоб змоделювати провайдера, який
+	// віддає значення поза enum. Потрібно для fault injection: без цього
+	// сценарій «невідомий enum» неможливо прогнати наживо, бо всі наші
+	// провайдери за побудовою повертають валідні значення — а от чужий
+	// MCP-сервер за тиждень може повернути будь-що.
+	KindOverride SourceKind
 }
 
 // Name реалізує Provider.
 func (p *FixtureProvider) Name() string { return "fixture" }
 
 // Kind реалізує Provider.
-func (p *FixtureProvider) Kind() SourceKind { return SourceMock }
+func (p *FixtureProvider) Kind() SourceKind {
+	if p.KindOverride != "" {
+		return p.KindOverride
+	}
+	return SourceMock
+}
 
 // RatesToUAH реалізує Provider.
 func (p *FixtureProvider) RatesToUAH(context.Context) (map[string]float64, string, error) {

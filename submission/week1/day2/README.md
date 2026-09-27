@@ -122,7 +122,7 @@ _, err = in.Validate()       // err != nil: виклик НЕ валідний
 
 ## Чотири рівні межі — і що ловить кожен
 
-`go run . faults` ганяє 11 навмисно зіпсованих викликів через ту саму межу, що й
+`go run . faults` ганяє 12 навмисно зіпсованих викликів через ту саму межу, що й
 справжні. Повна таблиця: [`results/faults.md`](results/faults.md), сирі дані:
 [`results/faults.json`](results/faults.json).
 
@@ -139,6 +139,7 @@ _, err = in.Validate()       // err != nil: виклик НЕ валідний
 | `ambiguous-alias` | validate | **rejected** | `"долар" must be three letters` — і це правильно |
 | `range-overflow` | repair | **repaired** | `history_days: clamped 365 → 14` |
 | `happy-path` | lookup | accepted | контроль: валідний виклик мусить пройти |
+| `unknown-enum` | **output** | **rejected** | `source.kind "аpi" must be one of api, cache, mock` |
 
 Рівні навмисно розділені, бо плутати їх дорого:
 
@@ -147,6 +148,16 @@ _, err = in.Validate()       // err != nil: виклик НЕ валідний
 2. **validate** — чи правильна **форма** аргументів. Мережі не потребує.
 3. **repair** — чи можна виправити **безпечно** (див. нижче).
 4. **lookup** — чи існує це в джерелі. **Єдиний рівень, який коштує запиту.**
+5. **output** — чи можна довіряти тому, що джерело ВІДПОВІЛО.
+
+Останній рядок, `unknown-enum`, — це інший напрямок межі, і його легко проґавити.
+Аргументи там бездоганні; поза контрактом виявляється **відповідь джерела**:
+`source.kind` приходить як `"аpi"` з **кириличною «а»**. Такий рядок проходить
+будь-яку перевірку «це непорожній текст» і ламається мовчки через тиждень —
+у коді споживача, далеко від місця помилки.
+
+Поки провайдер свій, санітизація виходу здається параноєю. Щойно він стає чужим
+MCP-сервером, це єдине, що стоїть між вами й значенням, якого ви не чекали.
 
 Ключовий рядок таблиці — `unknown-currency`. `XQZ` проходить decode і validate:
 форма бездоганна, три латинські літери. Що такої валюти не існує, знає лише
@@ -304,6 +315,47 @@ MCP-сервером, і контракт їде до клієнта по про
 - з'являються речі, яких у локальній функції не було: автентифікація, таймаути,
   версіонування схеми, часткова недоступність.
 
+### Ця межа вже наживо — у стартовій лабі
+
+У стартовому шаблоні курсу (`week1/Day2_.../labs`) MCP уже не «пізніше»: агент
+дефолтно підключає зовнішній MCP-сервер [`mono-go-mcp`](https://github.com/dimetron/mono-go-mcp).
+Запустив і подивився на stderr:
+
+```console
+$ go install github.com/dimetron/mono-go-mcp/cmd/mono-go-mcp@latest
+$ echo "Курс долара?" | go run . -offline console
+
+rates: offline fixture (USD/EUR/PLN)
+mcp: mono-go-mcp toolset attached (4 tools: mono_bank_sync, mono_client_info,
+                                   mono_currency_rates, mono_statement)
+mcp: withheld from the model (least agency): mono_set_webhook
+
+$ echo "Курс долара?" | go run . -offline -no-mcp console
+
+rates: offline fixture (USD/EUR/PLN)
+        ← рядків про mcp немає: модель бачить лише локальний tool
+```
+
+**Найцікавіше тут — третій рядок.** Сервер віддає **п'ять** інструментів, а
+модель бачить **чотири**: `mono_set_webhook` притримано навмисно. Це і є відповідь
+на питання «що схема дає клієнтові, а що лишається його відповідальністю»:
+
+- **схема дає** назви, аргументи й типи — клієнту не треба їх вгадувати;
+- **схема не дає** жодної підстави ці інструменти *надавати*. `tools/list`
+  описує, що сервер **вміє**; рішення, що з цього побачить модель, — ваше.
+  `mono_set_webhook` змінює стан на чужій стороні, і його не віддають моделі
+  не тому, що схема погана, а тому, що це **least agency**.
+
+Тобто зовнішня межа переносить контракт, але **не** переносить
+відповідальність: валідувати, обмежувати й логувати все одно мусить ваш код.
+
+Побічна знахідка з того самого прогону: стартова лаба пішла в мій локальний
+бекенд через `/v1/chat/completions` і отримала від нього чесну 501 —
+*«this mock implements the OpenAI Responses API only»*. Тобто **в межах одного
+репозиторію два кодові шляхи говорять двома різними «OpenAI-сумісними» API**:
+лаба через `pimodels` — chat completions, моя збірка через ADK `openaimodel` —
+responses. Та сама пастка, що описана в [ДЗ 1](../day1/README.md#чому-mockresponses-а-не-mock-llm-із-курсового-демо), але тепер видно, що вона є навіть усередині одного проєкту.
+
 І окремо: **A2A — це не інша назва MCP**. MCP — це agent ↔ tool (агент викликає
 інструмент за схемою). A2A — agent ↔ agent (два агенти домовляються про задачу).
 Плутати їх означає будувати HTTP-міст там, де потрібен контракт інструмента.
@@ -346,15 +398,17 @@ graph := workflow.Sequential(parseIntentNode, rateNode, formatAnswerNode)
 ### 1. Цикл «валідація → ремонт → повторна валідація» + fault injection
 
 Реалізовано в [`repair.go`](repair.go), ліміт спроб конфігурований
-(`RepairPolicy.MaxAttempts`). Fault injection — **11 сценаріїв** (вимога: ≥3),
+(`RepairPolicy.MaxAttempts`). Fault injection — **12 сценаріїв** (вимога: ≥3 — відсутнє поле, неправильний тип,
+невідомий enum; усі три покриті),
 `go run . faults`, покриті тестами:
 
 - відсутнє поле — `TestRepairOnlyDoesWhatCannotChangeMeaning/порожнє_поле`
 - неправильний тип — `TestDecodeArgsSeparatesLevelsOfFailure/не_той_тип`
 - невідоме поле — `.../невідоме_поле`
 - обірваний JSON — `.../обірваний_JSON`
-- невідомий enum — `TestQuoteValidatesItsOwnOutput/невідомий_enum` і
-  `.../битий_enum_усередині_history`
+- невідомий enum — сценарій `unknown-enum` у прогоні `go run . faults`
+  (провайдер повертає `source.kind` з кириличною «а») плюс юніт-тести
+  `TestQuoteValidatesItsOwnOutput/невідомий_enum` і `.../битий_enum_усередині_history`
 - неоднозначний синонім — `TestUnrepairableIsPermanent`
 - ліміт спроб — `TestRepairRespectsAttemptLimit`
 - слід аудиту — `TestRepairLeavesAnAuditTrail`

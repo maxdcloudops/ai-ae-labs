@@ -6,7 +6,7 @@
 | # | Завдання | Що зроблено | Артефакти |
 |---|---|---|---|
 | 1 | [Мій перший агент за 30 хвилин](week1/day1/) | Агент-планувальник вихідних у Львові з доменною межею **в коді**; конкурентний benchmark harness (errgroup + retry/backoff); вартість, перевірена **двома незалежними обчислювачами** | [графік](week1/day1/results/bench.svg) · [діалоги](week1/day1/results/dialogues.txt) · [fault injection](week1/day1/results/faults.txt) |
-| 2 | [Перший власний інструмент](week1/day2/) | Типізований `functiontool` із трирівневим контрактом (масив + enum), цикл «валідація → ремонт → повторна валідація», 11 сценаріїв fault injection; дані — **живий API НБУ** | [графік](week1/day2/results/faults.svg) · [діалоги](week1/day2/results/dialogues.txt) · [схеми](week1/day2/results/schema.txt) |
+| 2 | [Перший власний інструмент](week1/day2/) | Типізований `functiontool` із трирівневим контрактом (масив + enum), цикл «валідація → ремонт → повторна валідація», 12 сценаріїв fault injection; дані — **живий API НБУ** | [графік](week1/day2/results/faults.svg) · [діалоги](week1/day2/results/dialogues.txt) · [схеми](week1/day2/results/schema.txt) |
 
 ## Швидка перевірка
 

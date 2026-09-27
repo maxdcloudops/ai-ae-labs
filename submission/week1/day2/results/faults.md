@@ -11,5 +11,6 @@
 | `ambiguous-alias` | домен: «долар» — їх багато, ремонт НЕБЕЗПЕЧНИЙ | **rejected** | arguments cannot be repaired safely: field "base": invalid currency code: "долар" must be three letters (ISO … |
 | `range-overflow` | ремонт: діапазон підрізається до стелі | **repaired** | history_days: clamped 365 → 14 → base=USD target=UAH history_days=14 |
 | `happy-path` | контроль: валідний виклик мусить пройти | **accepted** | пройшов усі рівні: base=USD target=UAH history_days=2 |
+| `unknown-enum` | вихід: джерело повернуло значення поза enum | **rejected** | rate provider unavailable: source.kind "аpi" must be one of api, cache, mock |
 
 Артефакти: results/faults.json, results/faults.svg
