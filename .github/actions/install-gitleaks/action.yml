@@ -1,0 +1,22 @@
+# Встановлення gitleaks. Винесено в composite action, щоб обидві роботи
+# workflow ставили ОДНУ версію: два скани різними версіями сканера дають
+# розбіжні результати, і пояснювати їх доведеться щоразу заново.
+name: Install gitleaks
+description: Installs a pinned gitleaks release into /usr/local/bin
+
+inputs:
+  version:
+    description: gitleaks release to install
+    # Версія зафіксована навмисно: плаваючий latest робить CI, який ламається
+    # сам по собі в день релізу сканера.
+    default: "8.30.1"
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${{ inputs.version }}/gitleaks_${{ inputs.version }}_linux_x64.tar.gz" \
+          | tar -xz -C /usr/local/bin gitleaks
+        gitleaks version
