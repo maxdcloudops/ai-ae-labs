@@ -1,0 +1,44 @@
+══════════════════════════════════════════════════════════
+1. Коректний запит
+
+Користувач: Який сьогодні курс долара до гривні? Покажи ще й останні 3 дні.
+
+  → tool call 1: get_exchange_rate(base="USD", target="UAH", history_days=3)
+  ← OK: {"pair":{"base":"USD","target":"UAH"},"rate":44.8414,"as_of":"2026-09-28","source":{"kind":"api","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"},"history":[{"date":"2026-09-24","rate":44.8571,"source":{"kind":"api","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"}},{"date":"2026-09-25","rate":44.9729,"source":{"kind":"api","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"}},{"date":"2026-09-26","rate":44.9729,"source":{"kind":"api","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"}}]}
+
+Агент: Курс USD/UAH за офіційними даними НБУ (джерело: api, дата у полі as_of). Історію за останні дні наведено в полі history — кожна точка має власне походження.
+
+══════════════════════════════════════════════════════════
+2. Помилкова валюта — модель самовиправляється
+
+Користувач: Скільки коштує USDD у гривнях?
+
+  → tool call 1: get_exchange_rate(base="USDD", target="UAH", history_days=0)
+  ← ВІДХИЛЕНО: arguments cannot be repaired safely: field "base": invalid currency code: "USDD" must be three letters (ISO 4217), got 4 characters
+  → tool call 2: get_exchange_rate(base="USD", target="UAH", history_days=0)
+  ← OK: {"pair":{"base":"USD","target":"UAH"},"rate":44.8414,"as_of":"2026-09-28","source":{"kind":"cache","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"},"history":[]}
+
+Агент: Коду USDD не існує — ISO 4217 для долара США це USD. Наводжу курс USD/UAH за даними НБУ із зазначенням джерела й дати.
+
+══════════════════════════════════════════════════════════
+3. Дві конвертації в одному повідомленні
+
+Користувач: Порівняй курс євро та фунта до гривні.
+
+  → tool call 1: get_exchange_rate(base="EUR", target="UAH", history_days=0)
+  ← OK: {"pair":{"base":"EUR","target":"UAH"},"rate":51.1358,"as_of":"2026-09-28","source":{"kind":"cache","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"},"history":[]}
+  → tool call 2: get_exchange_rate(base="GBP", target="UAH", history_days=0)
+  ← OK: {"pair":{"base":"GBP","target":"UAH"},"rate":59.422,"as_of":"2026-09-28","source":{"kind":"cache","name":"nbu","fetched_at":"2026-09-27T13:27:20Z"},"history":[]}
+
+Агент: Обидва курси отримано окремими викликами інструмента — кожен зі своїм джерелом і датою, тому їх можна порівнювати.
+
+══════════════════════════════════════════════════════════
+4. Fail path: джерело недоступне — чесна помилка замість числа
+
+Користувач: Курс швейцарського франка до гривні?
+
+  → tool call 1: get_exchange_rate(base="CHF", target="UAH", history_days=0)
+  ← ВІДХИЛЕНО: rate provider unavailable: simulated upstream outage
+
+Агент: Не вдалося отримати курс: джерело курсів недоступне. Назвати число з пам'яті я не можу — воно було б вигаданим.
+

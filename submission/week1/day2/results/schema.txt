@@ -1,0 +1,174 @@
+── ВХІД: схема, ВИВЕДЕНА з RateInput (жодного рядка JSON Schema від руки)
+{
+  "type": "object",
+  "properties": {
+    "base": {
+      "type": "string",
+      "description": "ISO 4217 code of the base currency, three letters, e.g. USD"
+    },
+    "target": {
+      "type": "string",
+      "description": "ISO 4217 code of the target currency, three letters, e.g. UAH"
+    },
+    "history_days": {
+      "type": "integer",
+      "description": "How many recent business days of history to include, 0 to 14; 0 means current rate only"
+    }
+  },
+  "required": [
+    "base",
+    "target"
+  ],
+  "additionalProperties": false
+}
+
+── ВХІД: ЯВНА functiontool.Config.InputSchema (обмеження, яких немає в системі типів Go)
+{
+  "type": "object",
+  "properties": {
+    "base": {
+      "type": "string",
+      "description": "ISO 4217 code of the base currency, three latin letters, e.g. USD",
+      "minLength": 3,
+      "maxLength": 3,
+      "pattern": "^[A-Za-z]{3}$"
+    },
+    "history_days": {
+      "type": "integer",
+      "description": "How many recent business days of history to include; 0 means current rate only",
+      "minimum": 0,
+      "maximum": 14
+    },
+    "target": {
+      "type": "string",
+      "description": "ISO 4217 code of the target currency, three latin letters, e.g. UAH",
+      "minLength": 3,
+      "maxLength": 3,
+      "pattern": "^[A-Za-z]{3}$"
+    }
+  },
+  "required": [
+    "base",
+    "target"
+  ]
+}
+
+── ВИХІД: схема, ВИВЕДЕНА з RateQuote — три рівні вкладеності, масив, enum
+{
+  "type": "object",
+  "properties": {
+    "pair": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "string",
+          "description": "Normalized ISO 4217 base currency code"
+        },
+        "target": {
+          "type": "string",
+          "description": "Normalized ISO 4217 target currency code"
+        }
+      },
+      "description": "The normalized currency pair this quote is about",
+      "required": [
+        "base",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "rate": {
+      "type": "number",
+      "description": "Current rate: how many units of target one unit of base buys"
+    },
+    "as_of": {
+      "type": "string",
+      "description": "Date of the current rate, YYYY-MM-DD"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Where this number came from: api, cache or mock"
+        },
+        "name": {
+          "type": "string",
+          "description": "Provider identifier, e.g. nbu"
+        },
+        "fetched_at": {
+          "type": "string",
+          "description": "RFC3339 timestamp of when this number was obtained"
+        }
+      },
+      "description": "Provenance of the current rate",
+      "required": [
+        "kind",
+        "name",
+        "fetched_at"
+      ],
+      "additionalProperties": false
+    },
+    "history": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Rate date, YYYY-MM-DD"
+          },
+          "rate": {
+            "type": "number",
+            "description": "How many units of target one unit of base buys on that date"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "Where this number came from: api, cache or mock"
+              },
+              "name": {
+                "type": "string",
+                "description": "Provider identifier, e.g. nbu"
+              },
+              "fetched_at": {
+                "type": "string",
+                "description": "RFC3339 timestamp of when this number was obtained"
+              }
+            },
+            "description": "Provenance of this particular data point",
+            "required": [
+              "kind",
+              "name",
+              "fetched_at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "date",
+          "rate",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Recent daily rates, oldest first; empty when history was not requested"
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional human-readable caveat about this quote"
+    }
+  },
+  "required": [
+    "pair",
+    "rate",
+    "as_of",
+    "source",
+    "history"
+  ],
+  "additionalProperties": false
+}

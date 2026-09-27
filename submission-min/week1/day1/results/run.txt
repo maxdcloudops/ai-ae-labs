@@ -1,0 +1,6 @@
+### MODEL=mock/mock-gpt
+Застереження: прогноз погоди й афішу цей бекенд не перевіряв — він фейковий.2026/09/27 12:56:14 [llm] model=mock/mock-gpt total=16ms tokens in/out=157/48
+### MODEL=mock/mock-gpt-mini
+Застереження: прогноз погоди й афішу цей бекенд не перевіряв — він фейковий.2026/09/27 12:56:15 [llm] model=mock/mock-gpt-mini total=18ms tokens in/out=157/48
+### MODEL=mock/mock-gpt-pro
+Застереження: прогноз погоди й афішу цей бекенд не перевіряв — він фейковий.2026/09/27 12:56:15 [llm] model=mock/mock-gpt-pro total=4ms tokens in/out=157/48

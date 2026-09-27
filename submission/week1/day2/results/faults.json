@@ -1,0 +1,173 @@
+[
+  {
+    "scenario": {
+      "name": "malformed-json",
+      "why": "рівень JSON: текст обірваний",
+      "raw_arguments": "{\"base\": \"USD\", \"target\":"
+    },
+    "stage": "decode",
+    "verdict": "rejected",
+    "message": "tool arguments are not valid for this contract: unexpected EOF"
+  },
+  {
+    "scenario": {
+      "name": "wrong-type",
+      "why": "рівень схеми: число там, де рядок",
+      "raw_arguments": "{\"base\": 840, \"target\": \"UAH\"}"
+    },
+    "stage": "decode",
+    "verdict": "rejected",
+    "message": "tool arguments are not valid for this contract: json: cannot unmarshal number into Go struct field RateInput.base of type string"
+  },
+  {
+    "scenario": {
+      "name": "unknown-field",
+      "why": "рівень схеми: поле, якого немає в контракті",
+      "raw_arguments": "{\"base\":\"USD\",\"target\":\"UAH\",\"currency\":\"EUR\"}"
+    },
+    "stage": "decode",
+    "verdict": "rejected",
+    "message": "tool arguments are not valid for this contract: json: unknown field \"currency\""
+  },
+  {
+    "scenario": {
+      "name": "missing-field",
+      "why": "рівень схеми: обов'язкове поле відсутнє",
+      "raw_arguments": "{\"base\": \"USD\"}"
+    },
+    "stage": "validate",
+    "verdict": "rejected",
+    "message": "arguments cannot be repaired safely: field \"target\": invalid currency code: currency code is empty (expected three letters, e.g. USD)",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "rejected (no safe repair)",
+        "error": "field \"target\": invalid currency code: currency code is empty (expected three letters, e.g. USD)"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "bad-code-shape",
+      "why": "рівень домену: валідний JSON, невалідний код",
+      "raw_arguments": "{\"base\": \"US1\", \"target\": \"UAH\"}"
+    },
+    "stage": "validate",
+    "verdict": "rejected",
+    "message": "arguments cannot be repaired safely: field \"base\": invalid currency code: \"US1\" must be three LATIN letters (ISO 4217); \"1\" is not one",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "rejected (no safe repair)",
+        "error": "field \"base\": invalid currency code: \"US1\" must be three LATIN letters (ISO 4217); \"1\" is not one"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "unknown-currency",
+      "why": "рівень домену: форма правильна, валюти немає",
+      "raw_arguments": "{\"base\": \"XQZ\", \"target\": \"UAH\"}"
+    },
+    "stage": "lookup",
+    "verdict": "rejected",
+    "message": "unknown currency code: XQZ is not published by this provider",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "validated"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "lowercase",
+      "why": "нормалізація: регістр — не помилка",
+      "raw_arguments": "{\"base\": \"usd\", \"target\": \"uah\"}"
+    },
+    "stage": "lookup",
+    "verdict": "accepted",
+    "message": "пройшов усі рівні: base=USD target=UAH history_days=0",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "validated"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "alias",
+      "why": "ремонт: однозначний синонім валюти",
+      "raw_arguments": "{\"base\": \"євро\", \"target\": \"UAH\"}"
+    },
+    "stage": "repair",
+    "verdict": "repaired",
+    "message": "base: resolved alias \"євро\" → \"EUR\" → base=EUR target=UAH history_days=0",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "repaired (base: resolved alias \"євро\" → \"EUR\")",
+        "error": "field \"base\": invalid currency code: \"євро\" must be three letters (ISO 4217), got 4 characters"
+      },
+      {
+        "attempt": 2,
+        "action": "validated"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "ambiguous-alias",
+      "why": "домен: «долар» — їх багато, ремонт НЕБЕЗПЕЧНИЙ",
+      "raw_arguments": "{\"base\": \"долар\", \"target\": \"UAH\"}"
+    },
+    "stage": "validate",
+    "verdict": "rejected",
+    "message": "arguments cannot be repaired safely: field \"base\": invalid currency code: \"долар\" must be three letters (ISO 4217), got 5 characters",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "rejected (no safe repair)",
+        "error": "field \"base\": invalid currency code: \"долар\" must be three letters (ISO 4217), got 5 characters"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "range-overflow",
+      "why": "ремонт: діапазон підрізається до стелі",
+      "raw_arguments": "{\"base\":\"USD\",\"target\":\"UAH\",\"history_days\":365}"
+    },
+    "stage": "repair",
+    "verdict": "repaired",
+    "message": "history_days: clamped 365 → 14 → base=USD target=UAH history_days=14",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "repaired (history_days: clamped 365 → 14)",
+        "error": "field \"history_days\": invalid history range: 365 is outside 0..14"
+      },
+      {
+        "attempt": 2,
+        "action": "validated"
+      }
+    ]
+  },
+  {
+    "scenario": {
+      "name": "happy-path",
+      "why": "контроль: валідний виклик мусить пройти",
+      "raw_arguments": "{\"base\":\"USD\",\"target\":\"UAH\",\"history_days\":2}"
+    },
+    "stage": "lookup",
+    "verdict": "accepted",
+    "message": "пройшов усі рівні: base=USD target=UAH history_days=2",
+    "steps": [
+      {
+        "attempt": 1,
+        "action": "validated"
+      }
+    ]
+  }
+]

@@ -36,7 +36,23 @@ config:
     - file: ${AGENTGATEWAY_BASE_COSTS:-./base-costs.json}
     - file: ${AGENTGATEWAY_PI_ALIASES:-./pi-aliases.json}
     - inline:
-        providers: {}
+        providers:
+          # Ціни трьох mock-конфігурацій. Бекенд один і той самий (mock-llm),
+          # різниця ТІЛЬКИ в прайсі — саме тому рядок вартості в бенчмарку
+          # можна перевірити: токени реальні, ставка оголошена тут, а
+          # cost_total у access-log має зійтися з арифметикою харнесу.
+          mock:
+            models:
+              mock-gpt:
+                rates: { input: "0.15", output: "0.60" }
+              mock-gpt-mini:
+                rates: { input: "0.05", output: "0.20" }
+              mock-gpt-pro:
+                rates: { input: "3.00", output: "15.00" }
+              mock-sloppy:
+                rates: { input: "0.15", output: "0.60" }
+              mock-fail:
+                rates: { input: "0.15", output: "0.60" }
 frontendPolicies:
   http:
     maxBufferSize: 20971520
@@ -162,7 +178,22 @@ llm:
       params:
         baseUrl: ${OPENCODE_BASE_URL:-https://opencode.ai/zen/go/v1}
         apiKey: ${OPENCODE_API_KEY:-}
+    - name: mock
+      provider:
+        custom:
+          providerOverride: mock
+          formats:
+            - type: completions
+            - type: responses
+      params:
+        baseUrl: ${MOCK_LLM_BASE_URL:-http://host.docker.internal:8098/v1}
+        apiKey: ${MOCK_LLM_API_KEY:-local}
   models:
+    - name: mock/*
+      provider:
+        reference: mock
+      transformation:
+        model: llmRequest.model.stripPrefix("mock/")
     - name: anthropic/*
       provider:
         reference: anthropic
@@ -319,8 +350,17 @@ llm:
             name: pi-go
             agentgateway.dev/id: 32a5356e-e005-45a1-ade5-d4862546b64c
             agentgateway.dev/createdAt: 1788259453
-        - key: agw_sk_x9dru9vISJ852w9ccpV0uNuYJpU2Qgc7
-          metadata:
-            name: playground
-            agentgateway.dev/id: 8c78bde4-4cf3-4d5c-b446-4ec12b465fa2
-            agentgateway.dev/createdAt: 1789764186
+        # Другий приймальний ключ («playground») був захардкоджений тут
+        # відкритим текстом і лежить у git-історії цього репозиторію
+        # (комміти 114197b від 21.09.2026 і 6a75145). Знайдено прогоном
+        # `gitleaks git --log-opts="--all"` — тим самим CI-кроком, який
+        # додано в ДЗ 1, і саме тим випадком, який pre-commit хук зловити
+        # не міг: коміт зроблено ДО того, як хук з'явився.
+        #
+        # Прибрано з робочого дерева. Це НЕ відкликання: ключ уже в історії,
+        # у клонах і в кеші GitHub, тож єдиний справжній перший крок —
+        # перевипустити його на стороні, яка його видала. Повідомлено в
+        # submission/week1/day1/README.md, §Ротація злитого ключа.
+        #
+        # Якщо вам потрібен другий приймальний ключ — задайте його змінною,
+        # як зроблено для pi-go вище, а не рядком у конфізі.

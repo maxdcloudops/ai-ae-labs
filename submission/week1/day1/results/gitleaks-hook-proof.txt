@@ -1,0 +1,19 @@
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+Finding:     GOOGLE_API_KEY=REDACTED
+Secret:      REDACTED
+RuleID:      gcp-api-key
+Entropy:     4.907072
+File:        leak-probe.txt
+Line:        1
+Fingerprint: leak-probe.txt:gcp-api-key:1
+
+9:04AM INF 0 commits scanned.
+9:04AM INF scanned ~55 bytes (55 bytes) in 31.7ms
+9:04AM WRN leaks found: 1
+❌ Коміт заблоковано: у staged-змінах знайдено секрет.

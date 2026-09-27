@@ -39,3 +39,27 @@ regexes = [
     # Conventional placeholder forms, which are documentation by definition.
     '''(?i)(api[_-]?key|token|secret)\s*[:=]\s*(your[_-]|example|placeholder|xxx|\.\.\.|<)''',
 ]
+
+# --- Baseline: знахідки, що вже в історії (НЕ виправлення) --------------------
+#
+# Прогін `gitleaks git --log-opts="--all"` знаходить захардкоджений приймальний
+# ключ agentgateway у коммітах 114197b і 6a75145 від 21.09.2026 — тобто в
+# коммітах, зроблених ДО появи pre-commit хука. Із робочого дерева ключ
+# прибрано (demo/1_ai-gateway/config/agentgateway.yaml), але з ІСТОРІЇ він
+# нікуди не подівся, і жоден сканер його звідти не прибере.
+#
+# Ці три fingerprint-и внесено сюди свідомо, щоб CI був зелений на НОВИХ
+# коммітах. Це не означає «проблему вирішено»: єдине справжнє виправлення —
+# перевипустити ключ на стороні, яка його видала. Знахідку описано в
+# submission/week1/day1/README.md.
+#
+# Fingerprint прив'язаний до коміту, а не до значення: якщо той самий ключ
+# з'явиться в новому коміті, gitleaks його зловить.
+[[rules]]
+id = "generic-api-key"
+[rules.allowlist]
+description = "Pre-existing upstream finding: hardcoded agentgateway client key in history"
+commits = [
+    "114197b6fca26a4d7dbed79786dde90a98bcf4cd",
+    "6a7514594788926bcf26a9a4266d8bff11199287",
+]

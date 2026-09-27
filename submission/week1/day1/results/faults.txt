@@ -1,0 +1,9 @@
+── fault injection: mock-fail (бекенд завжди 500) (mock/mock-fail)
+  спроба 1 за 1.323s → помилка: transient=true
+  спроба 2 за 1.396s → помилка: transient=true
+  спроба 3 за 1.338s → помилка: transient=true
+  спроба 4 за 1.403s → помилка: transient=true
+── спроб: 4 (стеля 4) · загальний час із паузами backoff: 6.95s
+── фінальна помилка (її й побачить користувач, без вигаданої відповіді):
+   mock-fail (бекенд завжди 500) / saturday-plan: labrun: run lviv_weekend_planner: openai: call failed: POST "http://localhost:4000/v1/responses": 500 Internal Server Error {"message":"simulated upstream failure for model mock-fail","type":"invalid_request_error"}
+── гейтвей побачив: запитів 12, статуси map[500:12], вартість $0.00000000

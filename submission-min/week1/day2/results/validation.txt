@@ -1,0 +1,17 @@
+$ go run . quote US1 UAH
+2026/09/27 12:56:54 field "base": invalid currency code: "US1" must be three LATIN letters (ISO 4217)
+exit status 1
+
+$ go run . quote USDD UAH
+2026/09/27 12:56:54 field "base": invalid currency code: "USDD" must be three letters (ISO 4217)
+exit status 1
+
+$ go run . quote XQZ UAH
+2026/09/27 12:56:55 unknown currency code: XQZ is not published by the NBU
+exit status 1
+
+$ go run . quote usd uah
+{
+  "base": "USD",
+  "target": "UAH",
+
