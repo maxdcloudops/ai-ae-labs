@@ -21,6 +21,8 @@ vars:
   # Lab package paths, so the per-day run tasks stay one line each.
   DAY1: ./week1/Day1_Models_and_Frameworks_Landscape/labs
   DAY2: ./week1/Day2_Structured_Output_Function_Calling/labs
+  DAY3: ./week2/Day3_First_ADK2_Agent_Workflow_Graph/labs3
+  DAY4: ./week2/Day4_Agent_as_Service_Deploy/labs4
 
 tasks:
   default:
@@ -199,7 +201,7 @@ tasks:
   # "address already in use". `task kill:8080` is the remedy.
 
   week1:day1:console:
-    desc: 'День 1: агент в інтерактивній консолі (потрібен ключ провайдера)'
+    desc: 'День 1: агент в інтерактивній консолі'
     cmds:
       - go run {{.DAY1}} console
 
@@ -209,7 +211,7 @@ tasks:
       - go run {{.DAY1}} web webui api
 
   week1:day2:console:
-    desc: 'День 2: консоль з живими курсами НБУ (потрібен ключ провайдера)'
+    desc: 'День 2: консоль з живими курсами НБУ'
     cmds:
       - go run {{.DAY2}} console
 
@@ -227,3 +229,99 @@ tasks:
     desc: 'День 2: таблиця NBU vs monobank side-by-side (модель не потрібна)'
     cmds:
       - go run {{.DAY2}} compare
+
+  # --- week2 ---------------------------------------------------------------
+
+  week2:build:
+    desc: 'Build week2'
+    cmds:
+      - go build ./week2/...
+
+  week2:test:
+    desc: 'Test week2 (race detector)'
+    cmds:
+      - go test -race ./week2/...
+
+  week2:run:
+    desc: 'Run a week2 lab: task week2:run PKG=./week2/Day3_First_ADK2_Agent_Workflow_Graph/labs3'
+    requires:
+      vars: [PKG]
+    cmds:
+      - go run {{.PKG}}
+
+  # День 3 має один прапорець — `-mode` (labs3/main.go) — і два значення:
+  # `live` (типове: реальна модель через `internal/modelcfg`, потрібен ключ) і
+  # `graph` (граф без жодного LLM-вузла: ні ключа, ні мережі). Третього
+  # значення `offline` у коді НЕМАЄ: `-mode=offline` завершується помилкою
+  # "unknown mode". Тому `:offline` тут — синонім `:graph`, названий так, як
+  # звикли матеріали курсу (пор. `week1:day2:console:offline`).
+  #
+  # Дві поверхні × три режими = шість входів:
+  #
+  #   task week2:day3:console:live      -mode=live    реальна модель
+  #   task week2:day3:console:graph     -mode=graph   без LLM, без ключа
+  #   task week2:day3:console:offline   -mode=graph   те саме, що :console:graph
+  #   task week2:day3:web:live          -mode=live    Web UI + REST
+  #   task week2:day3:web:graph         -mode=graph   Web UI + REST, без ключа
+  #   task week2:day3:web:offline       -mode=graph   те саме, що :web:graph
+  #
+  # `:graph` і `:offline` у кожній поверхні запускають ту саму команду. Друга
+  # назва існує, бо `offline` — звичне слово в матеріалах курсу; `:offline`
+  # викликає `:graph` через `deps`, щоб дві копії команди не розійшлися.
+  #
+  # День 4 — навпаки: labs4 виставляє той самий `-mode=graph` граф Дня 3 за
+  # REST, тож сервіс стартує й відповідає БЕЗ жодного ключа (він це сам
+  # логує: "ADK service listening ... no model credentials required").
+  #
+  # `/readyz` уже є у стартовому шаблоні (labs4/service.go) і віддає `200`;
+  # `503` він віддає лише в режимі drain, який студент додає за ДЗ 4 — тому
+  # `week2:day4:health` навмисно перевіряє liveness, а не readiness.
+  #
+  # `console` читає os.Stdin, тож канонічний запит можна подати так:
+  #   echo "Мерчант A-114 просить повернення по транзакції txn-2026-07-118845" \
+  #     | task week2:day3:console:live
+  #
+  # Усі три `*:web` задачі слухають :8080, як і `week2:day4:serve`, тому
+  # одночасно вони не працюють — і Ctrl-C часто лишає дочірній процес живим.
+  # `task kill:8080` — ліки.
+
+  week2:day3:console:live:
+    desc: 'День 3: граф у консолі, режим live (-mode=live)'
+    cmds:
+      - go run {{.DAY3}} -mode=live console
+
+  week2:day3:console:graph:
+    desc: 'День 3: граф у консолі, режим graph — без LLM, ключ не потрібен (-mode=graph)'
+    cmds:
+      - go run {{.DAY3}} -mode=graph console
+
+  # `offline` — звичне слово в матеріалах курсу. Це той самий `-mode=graph`,
+  # тож задача викликає `:graph` через `deps`, а не дублює команду: два
+  # однакові `cmds` розійшлися б при першій же правці.
+  week2:day3:console:offline:
+    desc: 'День 3: граф у консолі — те саме, що :console:graph (-mode=graph)'
+    deps: [week2:day3:console:graph]
+
+  week2:day3:web:live:
+    desc: 'День 3: Web UI http://localhost:8080/ui/ + REST API /api, режим live (-mode=live)'
+    cmds:
+      - go run {{.DAY3}} -mode=live web webui api
+
+  week2:day3:web:graph:
+    desc: 'День 3: Web UI + REST API, режим graph — без LLM, ключ не потрібен (-mode=graph)'
+    cmds:
+      - go run {{.DAY3}} -mode=graph web webui api
+
+  week2:day3:web:offline:
+    desc: 'День 3: Web UI + REST API — те саме, що :web:graph (-mode=graph)'
+    deps: [week2:day3:web:graph]
+
+  week2:day4:serve:
+    desc: 'День 4: HTTP-сервіс на http://localhost:8080 (/health, /readyz, /api/) — ключ НЕ потрібен'
+    cmds:
+      - go run {{.DAY4}}
+
+  week2:day4:health:
+    desc: 'День 4: перевірка liveness одним рядком (сервіс має вже працювати)'
+    cmds:
+      - curl -i http://localhost:{{.PORT | default "8080"}}/health
