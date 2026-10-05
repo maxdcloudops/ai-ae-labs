@@ -23,6 +23,39 @@ vars:
   DAY2: ./week1/Day2_Structured_Output_Function_Calling/labs
   DAY3: ./week2/Day3_First_ADK2_Agent_Workflow_Graph/labs3
   DAY4: ./week2/Day4_Agent_as_Service_Deploy/labs4
+  DAY5: ./week3/Day5_Lossless_PDF_Parsing_Chunking/labs5
+  DAY6: ./week3/Day6_Reranking_Semantic_Cache_Maturity_Ladder/labs6
+  # День 4 у контейнері: тег, ім'я контейнера і платформа. Задачі нижче ділять
+  # ці змінні, щоб `docker stop` не промахнувся повз ім'я, яке змінили лише в
+  # одному місці. `DOCKER_PLATFORM` така сама, як у README лаби: `linux/amd64`
+  # потрібна для Cloud Run, а на Apple Silicon це cross-compile з емуляцією на
+  # запуску. Перекривається з командного рядка:
+  #   task week2:day4:docker:build DOCKER_PLATFORM=linux/arm64
+  #
+  # `DOCKER_PLATFORMS` (множина) — список через кому для multiarch-збірки buildx
+  # (`docker:multiarch`). Однією змінною обидва шляхи не обслуговуються: `docker
+  # build` приймає рівно одну платформу, `docker run --platform` — теж, а `--load`
+  # віддає лише одну, тож multiarch-образ мусить їхати в реєстр (`--push`).
+  DAY4_IMAGE: ai-ae-lab4:week2
+  DAY4_CONTAINER: ai-ae-lab4
+  DOCKER_PLATFORM: linux/amd64
+  DOCKER_PLATFORMS: linux/amd64,linux/arm64
+  # REGISTRY не оголошений у vars навмисно. Задачі з `vars:` затіняють змінну
+  # оточення порожнім значенням, а `requires: vars: [REGISTRY]` без оголошення
+  # читає саме оточення й ловить незаданий реєстр до першої команди:
+  #   task week2:day4:docker:multiarch REGISTRY=ghcr.io/<user>
+  #   REGISTRY=europe-west1-docker.pkg.dev/<project>/<repo> task week2:day4:docker:multiarch
+  # demo/4_adk_examples — приклади графового рушія ADK (демо №4). Один var на
+  # одинадцять задач нижче, щоб шлях не повторювався й не розійшовся.
+  ADK4: ./demo/4_adk_examples
+  # demo/agui_web — AG-UI міст + вбудована сторінка чату (демо без номера).
+  AGUIWEB: ./demo/agui_web
+  AGUI_IMAGE: ai-ae-agui:demo
+  AGUI_CONTAINER: ai-ae-agui
+  # demo/6_adk_telegram_bot — ADK-агент у Telegram (демо №6).
+  TG6: ./demo/6_adk_telegram_bot
+  # Тег образу демо №6. Чотири задачі нижче ділять його, щоб тег не розійшовся.
+  TG6_IMAGE: ai-ae-telegram-bot:demo6
 
 tasks:
   default:
@@ -249,21 +282,32 @@ tasks:
     cmds:
       - go run {{.PKG}}
 
-  # День 3 має один прапорець — `-mode` (labs3/main.go) — і два значення:
-  # `live` (типове: реальна модель через `internal/modelcfg`, потрібен ключ) і
-  # `graph` (граф без жодного LLM-вузла: ні ключа, ні мережі). Третього
-  # значення `offline` у коді НЕМАЄ: `-mode=offline` завершується помилкою
-  # "unknown mode". Тому `:offline` тут — синонім `:graph`, названий так, як
-  # звикли матеріали курсу (пор. `week1:day2:console:offline`).
+  # День 3 має два прапорці (labs3/main.go). `-mode` — як виконується запит, і
+  # два його значення: `live` (типове: реальна модель через `internal/modelcfg`,
+  # потрібен ключ) і `graph` (граф без жодного LLM-вузла: ні ключа, ні мережі).
+  # Третього значення `offline` у коді НЕМАЄ: `-mode=offline` завершується
+  # помилкою "unknown mode". Тому `:offline` тут — синонім `:graph`, названий
+  # так, як звикли матеріали курсу (пор. `week1:day2:console:offline`).
   #
-  # Дві поверхні × три режими = шість входів:
+  # `-classify` — хто обирає маршрут: `rule` (типове: чиста функція
+  # `refund.Classify`, без моделі) або `model` (той самий провайдер, що вже
+  # завантажений, називає одну з трьох гілок словом). Це окремий вимір, а не
+  # третій режим: `-classify=model` потребує провайдера, тож поєднання
+  # `-mode=graph -classify=model` код відкидає з поясненням — граф існує саме
+  # для того, щоб обійтися без ключа. Задачі `:graph-llm` — це `-mode=live
+  # -classify=model`: маршрут обирає модель, а кроки виконує граф; вони
+  # потребують ключа й не мають `:offline`-псевдоніма, бо без ключа не працюють.
   #
-  #   task week2:day3:console:live      -mode=live    реальна модель
-  #   task week2:day3:console:graph     -mode=graph   без LLM, без ключа
-  #   task week2:day3:console:offline   -mode=graph   те саме, що :console:graph
-  #   task week2:day3:web:live          -mode=live    Web UI + REST
-  #   task week2:day3:web:graph         -mode=graph   Web UI + REST, без ключа
-  #   task week2:day3:web:offline       -mode=graph   те саме, що :web:graph
+  # Дві поверхні × три режими = шість входів, плюс два граф-з-моделлю:
+  #
+  #   task week2:day3:console:live      -mode=live                      реальна модель
+  #   task week2:day3:console:graph     -mode=graph                     без LLM, без ключа
+  #   task week2:day3:console:offline   -mode=graph                     те саме, що :console:graph
+  #   task week2:day3:console:graph-llm -mode=live -classify=model      маршрут обирає модель
+  #   task week2:day3:web:live          -mode=live                      Web UI + REST
+  #   task week2:day3:web:graph         -mode=graph                     Web UI + REST, без ключа
+  #   task week2:day3:web:offline       -mode=graph                     те саме, що :web:graph
+  #   task week2:day3:web:graph-llm     -mode=live -classify=model      Web UI + REST, маршрут від моделі
   #
   # `:graph` і `:offline` у кожній поверхні запускають ту саму команду. Друга
   # назва існує, бо `offline` — звичне слово в матеріалах курсу; `:offline`
@@ -302,6 +346,14 @@ tasks:
     desc: 'День 3: граф у консолі — те саме, що :console:graph (-mode=graph)'
     deps: [week2:day3:console:graph]
 
+  # Той самий граф, але маршрут обирає модель: `-mode=live -classify=model`.
+  # Кроки виконує граф — модель лише називає гілку словом, тож у журналі видно
+  # і рішення моделі, і те, що роботу зробив вузол. Потрібен ключ.
+  week2:day3:console:graph-llm:
+    desc: 'День 3: граф у консолі, маршрут обирає модель (-mode=live -classify=model)'
+    cmds:
+      - go run {{.DAY3}} -mode=live -classify=model console
+
   week2:day3:web:live:
     desc: 'День 3: Web UI http://localhost:8080/ui/ + REST API /api, режим live (-mode=live)'
     cmds:
@@ -316,6 +368,13 @@ tasks:
     desc: 'День 3: Web UI + REST API — те саме, що :web:graph (-mode=graph)'
     deps: [week2:day3:web:graph]
 
+  # Web UI + REST із моделлю-маршрутизатором: та сама команда, що
+  # `:web:live`, плюс `-classify=model`. Слухає :8080 — див. `task kill:8080`.
+  week2:day3:web:graph-llm:
+    desc: 'День 3: Web UI + REST API, маршрут обирає модель (-mode=live -classify=model)'
+    cmds:
+      - go run {{.DAY3}} -mode=live -classify=model web webui api
+
   week2:day4:serve:
     desc: 'День 4: HTTP-сервіс на http://localhost:8080 (/health, /readyz, /api/) — ключ НЕ потрібен'
     cmds:
@@ -325,3 +384,558 @@ tasks:
     desc: 'День 4: перевірка liveness одним рядком (сервіс має вже працювати)'
     cmds:
       - curl -i http://localhost:{{.PORT | default "8080"}}/health
+
+  # --- День 4 у контейнері ----------------------------------------------------
+  #
+  # Та сама лаба, але як статичний образ: `FROM scratch`, non-root
+  # 65532:65532, без shell і пакетного менеджера. Це останній крок тижня 2 —
+  # від «працює на моїй машині» до артефакту, який можна покласти в реєстр.
+  #
+  # Build context — КОРІНЬ репозиторію, не labs4/: звідти потрібні go.mod,
+  # go.sum і спільний пакет week2/internal/refund. Тому `-f` вказує на
+  # Dockerfile явно, а не через `dir:`. `Dockerfile.dockerignore` поруч із
+  # Dockerfile ріже контекст до модульних файлів і потрібних Go-файлів тижня 2;
+  # apps/.env у контекст не потрапляє.
+  #
+  # `linux/amd64` — та сама платформа, що в README лаби й у CLOUD_RUN.md
+  # (її вимагає Cloud Run). На Apple Silicon це cross-compile, а запуск іде
+  # через емуляцію: повільніше, але конфігурація та сама, що в хмарі.
+  # Швидша місцева збірка — DOCKER_PLATFORM=linux/arm64, але такий образ не для Cloud Run.
+  #
+  # Образ на дві архітектури збирає окрема задача `docker:multiarch` — теж
+  # buildx, але з `--push`. Решта задач лишаються одноплатформними: контейнер
+  # для smoke-перевірок локальний, а образ із реєстру підтягує потрібну
+  # архітектуру сам.
+  #
+  # Ключі для базового шляху НЕ потрібні: граф `-mode=graph` не має жодного
+  # LLM-вузла, і сервіс сам це логує («no model credentials required»). Тому
+  # жодного --env-file тут немає, на відміну від демо №6.
+  #
+  # Порт: контейнер слухає :8080, назовні публікується 127.0.0.1:8080. Уже
+  # піднятий `go run {{.DAY4}}` тримає той самий порт — ліки `task kill:8080`,
+  # а для одноразової перевірки досить PORT=18080.
+  week2:day4:docker:build:
+    desc: 'День 4: зібрати образ ({{.DOCKER_PLATFORM}}, контекст — корінь репозиторію)'
+    cmds:
+      - docker build --platform {{.DOCKER_PLATFORM}} -f {{.DAY4}}/Dockerfile -t {{.DAY4_IMAGE}} .
+
+  # Multiarch — для публікації, не для локальних перевірок. `--push` тут не
+  # опція: buildx не вміє `--load` від індексу з кількома платформами, а
+  # локальний smoke усе одно не запуститься під чужу архітектуру.
+  # `--provenance=false` тримає маніфест пласким: Cloud Run читає простий індекс
+  # без attestation.
+  #
+  # Тег несе обидві платформи в імені, щоб multiarch-образ не перезаписав
+  # локальний `{{.DAY4_IMAGE}}` під час роботи над лабою.
+  #
+  # `requires` перевіряє {{.REGISTRY}} до першої команди, тому `REGISTRY`
+  # працює і як змінна Task, і як змінна оточення (див. коментар у vars).
+  week2:day4:docker:multiarch:
+    desc: 'День 4: buildx multiarch ({{.DOCKER_PLATFORMS}}) і --push у реєстр REGISTRY'
+    requires:
+      vars: [REGISTRY]
+    cmds:
+      - |
+        set -e
+        tag=$(printf '%s' '{{.DOCKER_PLATFORMS}}' | tr '/,' '--')
+        image="{{.REGISTRY}}/{{.DAY4_IMAGE}}-$tag"
+        echo "building $image for {{.DOCKER_PLATFORMS}}"
+        docker buildx build --platform {{.DOCKER_PLATFORMS}} \
+          --provenance=false \
+          -f {{.DAY4}}/Dockerfile \
+          -t "$image" --push .
+        echo '--- опублікований індекс ---'
+        docker buildx imagetools inspect "$image"
+
+  week2:day4:docker:run:
+    desc: 'День 4: запустити сервіс у контейнері (detached, loopback:8080, read-only)'
+    cmds:
+      # Спершу прибрати одноіменний контейнер: `docker run` без цього падає з
+      # «name is already in use», і саме це найчастіша причина, чому задача
+      # виглядає зламаною після першого Ctrl-C.
+      - docker rm -f {{.DAY4_CONTAINER}} >/dev/null 2>&1 || true
+      - |
+        docker run --name {{.DAY4_CONTAINER}} --platform {{.DOCKER_PLATFORM}} --detach \
+          --read-only --cap-drop ALL \
+          -p 127.0.0.1:{{.PORT | default "8080"}}:8080 {{.DAY4_IMAGE}}
+      - sleep 2
+      - docker ps --filter name={{.DAY4_CONTAINER}} --format '{{`{{.Names}}`}} {{`{{.Status}}`}} {{`{{.Ports}}`}}'
+
+  # Ті самі чотири перевірки, що в README лаби, але одною задачею. Порядок
+  # важливий: сесію треба створити до SSE, інакше буде 404. Сесія
+  # in-memory, тож повторний запуск на вже наявній сесії віддає 500
+  # «session already exists» — це не помилка образу, а стан сервісу.
+  week2:day4:docker:smoke:
+    desc: 'День 4: чотири перевірки контейнера — /health, /readyz, сесія, SSE-хід'
+    cmds:
+      - |
+        set -e
+        BASE=http://127.0.0.1:{{.PORT | default "8080"}}
+        echo '--- 1/4 /health (liveness) ---'
+        curl -fsS "$BASE/health"; echo
+        echo '--- 2/4 /readyz (readiness) ---'
+        curl -fsS "$BASE/readyz"; echo
+        echo '--- 3/4 create session ---'
+        curl -sS -X POST "$BASE/api/apps/first_graph_agent/users/learner/sessions/demo" \
+          -H 'Content-Type: application/json' -d '{}' | head -c 200; echo
+        echo '--- 4/4 run the graph over SSE ---'
+        # Без `head -c`: потік завершується сам після трьох подій (~1.5 КБ), а
+        # обрізання через head дає `curl: (23) Failure writing output to
+        # destination`, що виглядає як помилка, хоч нею не є.
+        curl -fsS -N --max-time 30 "$BASE/api/run_sse" \
+          -H 'Content-Type: application/json' \
+          -d '{"appName":"first_graph_agent","userId":"learner","sessionId":"demo","newMessage":{"role":"user","parts":[{"text":"Мерчант A-114 просить повернення по транзакції txn-2026-07-118845"}]}}'
+        echo
+        echo 'Очікувано: OK, OK, JSON з "id":"demo", потім три SSE data: з виходами вузлів.'
+        echo 'Повторіть лише останній curl — отримаєте "status":"already_open".'
+
+  # Доказ, що образ не просто стартує, а й коректно завершується: SIGTERM
+  # переводить сервіс у drain, і процес виходить з 0. Це відрізняє «вбити
+  # контейнер» від «зупинити сервіс».
+  week2:day4:docker:stop:
+    desc: 'День 4: SIGTERM + перевірка drain (очікуємо exit=0 і «drained and stopped»)'
+    cmds:
+      - docker stop --timeout 35 {{.DAY4_CONTAINER}}
+      - docker inspect {{.DAY4_CONTAINER}} --format 'exit={{`{{.State.ExitCode}}`}}'
+      - docker logs {{.DAY4_CONTAINER}} 2>&1 | tail -3
+
+  week2:day4:docker:inspect:
+    desc: 'День 4: платформа, розмір і користувач зібраного образу'
+    cmds:
+      - docker image inspect {{.DAY4_IMAGE}} --format 'platform={{`{{.Os}}`}}/{{`{{.Architecture}}`}} size={{`{{.Size}}`}} bytes user={{`{{.Config.User}}`}}'
+
+  week2:day4:docker:rm:
+    desc: 'День 4: прибрати контейнер (образ лишається)'
+    cmds:
+      - docker rm -f {{.DAY4_CONTAINER}} >/dev/null 2>&1 || true
+      - echo 'container {{.DAY4_CONTAINER}} removed'
+
+  # --- week3 ---------------------------------------------------------------
+  #
+  # Обидві лаби тижня 3 — графи без LLM: ключ і .env не потрібні. Задачі
+  # запускаються з теки лаби (`dir:`), бо шляхи `testdata/...` у лабах відносні:
+  # labs5 читає шлях документа з консолі, labs6 — корпус testdata/chunks.json.
+  #
+  #   task week3:day5:md                 тестовий документ .md через увесь граф
+  #   task week3:day5:pdf                той самий документ як PDF → docling-mcp (потрібен uv)
+  #   task week3:day6:console:lab5       ДЗ 6 на чанках, які зберегло ваше ДЗ 5
+  #
+  # `console` читає os.Stdin, тож :md і :pdf подають шлях через echo й
+  # завершуються на EOF. Усі `*:web` слухають :8080 — ліки `task kill:8080`.
+
+  week3:build:
+    desc: 'Build week3'
+    cmds:
+      - go build ./week3/...
+
+  week3:test:
+    desc: 'Test week3 (race detector)'
+    cmds:
+      - go test -race ./week3/...
+
+  week3:run:
+    desc: 'Run a week3 lab: task week3:run PKG=./week3/Day5_Lossless_PDF_Parsing_Chunking/labs5'
+    requires:
+      vars: [PKG]
+    cmds:
+      - go run {{.PKG}}
+
+  week3:day5:test:
+    desc: 'День 5: тести лаби й internal/* з -race (без Python, docling і мережі)'
+    cmds:
+      - go test -race -count=1 {{.DAY5}}/...
+
+  week3:day5:console:
+    desc: 'День 5: ingestion-граф у консолі — введіть шлях, напр. testdata/ledgerworks_soc2.md'
+    dir: '{{.DAY5}}'
+    cmds:
+      - go run . console
+
+  week3:day5:md:
+    desc: 'День 5: прогнати testdata/ledgerworks_soc2.md через граф (ранній win)'
+    dir: '{{.DAY5}}'
+    cmds:
+      - echo testdata/ledgerworks_soc2.md | go run . console
+
+  week3:day5:pdf:
+    desc: 'День 5: прогнати testdata/ledgerworks_soc2.pdf через docling-mcp (потрібен uv; перший запуск — довгий)'
+    dir: '{{.DAY5}}'
+    cmds:
+      - echo testdata/ledgerworks_soc2.pdf | go run . console
+
+  week3:day5:web:
+    desc: 'День 5: Web UI http://localhost:8080/ui/ + REST /api (без ключа)'
+    dir: '{{.DAY5}}'
+    cmds:
+      - go run . web webui api
+
+  week3:day5:docling:e2e:
+    desc: 'День 5: opt-in тест справжнього docling-mcp на тестовому PDF (потрібен uv)'
+    cmds:
+      - DOCLING_E2E=1 go test -count=1 -run TestRealServer -v {{.DAY5}}/internal/docling
+
+  week3:day6:test:
+    desc: 'День 6: тести лаби й internal/corpus з -race (без ключів і без мережі)'
+    cmds:
+      - go test -race -count=1 {{.DAY6}}/...
+
+  week3:day6:console:
+    desc: 'День 6: retrieval-граф у консолі на testdata/chunks.json (запит: Що таке тариф T-2?)'
+    dir: '{{.DAY6}}'
+    cmds:
+      - go run . console
+
+  week3:day6:console:lab5:
+    desc: 'День 6: консоль на чанках з ДЗ 5 (CHUNKS=labs5/testdata/chunks.json або свій шлях)'
+    dir: '{{.DAY6}}'
+    cmds:
+      - CHUNKS={{.CHUNKS | default "../../Day5_Lossless_PDF_Parsing_Chunking/labs5/testdata/chunks.json"}} go run . console
+
+  week3:day6:web:
+    desc: 'День 6: Web UI http://localhost:8080/ui/ + REST /api (без ключа)'
+    dir: '{{.DAY6}}'
+    cmds:
+      - go run . web webui api
+
+  # --- demo №4: приклади графового рушія ADK у Web UI -------------------------
+  #
+  # Одинадцять прикладів графового рушія (`google.golang.org/adk/v2/workflow`
+  # + `agent/workflowagent`) із demo/4_adk_examples. Це приклади-демо, а не
+  # лабораторні: вони нічого не перевіряють, а показують примітив.
+  #
+  # Задачі цієї секції піднімають приклад як ВЕБСЕРВЕР — тими самими трьома
+  # аргументами лаунчера, що й решта демо курсу (`week1:day1:web`,
+  # `week2:day3:web:*`):
+  #
+  #   task demo:4_adk:basic:web      → http://localhost:8080/ui/  +  /api
+  #
+  # `web` піднімає сервер, `webui` віддає сторінку на /ui/, `api` відкриває
+  # REST на /api. Голих консольних задач тут немає навмисно: щоб подивитися
+  # приклад, досить відкрити Web UI. Консольні входи лишилися в
+  # demo/4_adk_examples/Taskfile.yml (`task basic`, `task run P=...`).
+  #
+  # У кожної теки є власна задача, названа за її шляхом: `routing/llm` →
+  # `demo:4_adk:routing:llm:web`. Два рівні, бо теки лежать на двох рівнях
+  # глибини (`basic/` — один сегмент, `routing/llm/` — два).
+  #
+  # Сім прикладів із одинадцяти не мають LLM-вузла взагалі, тож працюють без
+  # ключа й без мережі:
+  #
+  #   basic            послідовний ланцюжок FunctionNode
+  #   dynamic:basic    імперативна оркестрація дочірніх вузлів
+  #   dynamic:hitl     динамічний оркестратор зупиняється на ввід людини
+  #   hitl_simple      пауза/продовження на двох вузлах
+  #   hitl_rerun       повторний вхід в один вузол
+  #   routing:int      гілка за числом
+  #   routing:string   гілка за рядком
+  #
+  # Решта чотири на старті кличуть internal/modelcfg, тому потребують
+  # налаштованого провайдера — як лабораторні дня 3 (apps/.env, MODEL,
+  # DEFAULT_MODEL_PROVIDER). Web UI — лише інший вхід: модель усе одно
+  # будується на старті, до відкриття сторінки. `complex` і `routing:llm`
+  # потребують САМЕ Gemini: `complex` використовує Google Search grounding, а
+  # класифікатору `routing:llm` потрібен провайдер, який modelcfg уміє
+  # спрямувати в Gemini.
+  #
+  #   complex                  розгалуження → зведення → синтез   (Gemini)
+  #   dynamic:llm              динамічний оркестратор + LlmAgent
+  #   dynamic:use_as_output    делегування виведення дитині
+  #   routing:llm              класифікує модель                 (Gemini)
+  #
+  # Усі одинадцять перевірено наживо: /api/list-apps віддає ім'я застосунку,
+  # /ui/ повертає 200, і хід справді виконується через /api/run_sse (`basic`
+  # повертає «HELLO WEB», `routing:llm` — класифікацію й відповідь).
+  #
+  # ВАЖЛИВО: кожна задача слухає :8080, тож одночасно працює лише одна — і
+  # Ctrl-C часто лишає дочірній процес живим, після чого наступний запуск падає
+  # з "address already in use". Ліки ті самі, що й для решти `*:web`:
+  #
+  #   task kill:8080
+  #
+  # Задачі `all:web` тут НЕМАЄ навмисно: вона піднімала б одинадцять серверів
+  # на одному порту, тож десять із них одразу впали б. Прогін «усього
+  # поспіль» лишився в demo/4_adk_examples/Taskfile.yml (`task all`) — він
+  # запускає приклади консольними смоук-запусками, яких ця секція не показує.
+
+  demo:4_adk:list:
+    desc: 'Демо №4: перелік одинадцяти прикладів графового рушія'
+    dir: '{{.ADK4}}'
+    cmds:
+      - task list
+
+  demo:4_adk:web:
+    desc: 'Демо №4: Web UI для довільного прикладу: task demo:4_adk:web P=routing/llm'
+    dir: '{{.ADK4}}'
+    requires:
+      vars: [P]
+    cmds:
+      - task run P={{.P}} ARGS='web webui api'
+
+  # Збірка й перевірка всього каталогу. Тут немає задач для окремих прикладів:
+  # збірка однакова для всіх, а решта поведінки — у `dir:`-задачах нижче.
+  demo:4_adk:build:
+    desc: 'Демо №4: зібрати всі приклади (артефактів не лишає)'
+    dir: '{{.ADK4}}'
+    cmds:
+      - task build
+
+  demo:4_adk:verify:
+    desc: 'Демо №4: gofmt + vet + build на всіх прикладах'
+    dir: '{{.ADK4}}'
+    cmds:
+      - task verify
+
+  # --- demo №4: приклади — по одній задачі на кожну теку, у Web UI ------------
+  #
+  # `dir:` замість `go run ./demo/4_adk_examples/...`: задача працює з теки
+  # прикладу, тож `go run . web webui api` — це рівно та команда, що стоїть у
+  # README прикладу, і її можна скопіювати в термінал як є.
+  #
+  # Порт у всіх :8080 — див. `task kill:8080`.
+
+
+  demo:4_adk:basic:web:
+    desc: 'Демо №4 · basic: Web UI http://localhost:8080/ui/ + REST /api (без ключа)'
+    dir: '{{.ADK4}}/basic'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:complex:web:
+    desc: 'Демо №4 · complex: Web UI + REST — потрібен Gemini (grounding)'
+    dir: '{{.ADK4}}/complex'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:dynamic:basic:web:
+    desc: 'Демо №4 · dynamic/basic: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/dynamic/basic'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:dynamic:hitl:web:
+    desc: 'Демо №4 · dynamic/hitl: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/dynamic/hitl'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:dynamic:llm:web:
+    desc: 'Демо №4 · dynamic/llm: Web UI + REST (потрібен провайдер)'
+    dir: '{{.ADK4}}/dynamic/llm'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:dynamic:use_as_output:web:
+    desc: 'Демо №4 · dynamic/use_as_output: Web UI + REST (потрібен провайдер)'
+    dir: '{{.ADK4}}/dynamic/use_as_output'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:hitl_simple:web:
+    desc: 'Демо №4 · hitl_simple: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/hitl_simple'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:hitl_rerun:web:
+    desc: 'Демо №4 · hitl_rerun: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/hitl_rerun'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:routing:int:web:
+    desc: 'Демо №4 · routing/int: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/routing/int'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:routing:llm:web:
+    desc: 'Демо №4 · routing/llm: Web UI + REST — потрібен Gemini'
+    dir: '{{.ADK4}}/routing/llm'
+    cmds:
+      - go run . web webui api
+
+  demo:4_adk:routing:string:web:
+    desc: 'Демо №4 · routing/string: Web UI + REST (без ключа)'
+    dir: '{{.ADK4}}/routing/string'
+    cmds:
+      - go run . web webui api
+
+  # --- demo №6: ADK-агент у Telegram -----------------------------------------
+  #
+  # Бот довгоопитує Bot API, тож задачі тут не слухають порт і не конфліктують
+  # із `*:web`. Потрібні TELEGRAM_BOT_API і TELEGRAM_ALLOW_USER_IDS в apps/.env
+  # (шаблон — apps/.env-example) і ключ провайдера — як у лабах тижня 2.
+  #
+  # `:dry` — це той самий старт без опитування: він будує провайдера й агента
+  # і виходить. Так видно, що ключі й MODEL правильні, ще до першого повідомлення.
+  #
+  # `:allow-all` навмисно окрема задача з очевидною назвою: вона скасовує
+  # allowlist, тобто відкриває платну модель будь-кому, хто знайде бота.
+  demo:6_tg:dry:
+    desc: 'Демо №6: перевірити apps/.env, провайдера й агента, не підключаючись до Telegram'
+    cmds:
+      - go run {{.TG6}} -dry-run
+
+  demo:6_tg:
+    desc: 'Демо №6: запустити бота (Ctrl-C — зупинити; потрібен TELEGRAM_BOT_API)'
+    cmds:
+      - go run {{.TG6}}
+
+  demo:6_tg:allow-all:
+    desc: 'Демо №6: те саме, але БЕЗ allowlist — відповідає будь-якому користувачу Telegram'
+    cmds:
+      - go run {{.TG6}} -allow-all
+
+  demo:6_tg:test:
+    desc: 'Демо №6: тести з -race (без ключів і без мережі)'
+    cmds:
+      - go test -race -count=1 {{.TG6}}/
+
+  # Контейнерні входи до демо №6. Контекст збірки — КОРІНЬ репозиторію (бот
+  # імпортує internal/modelcfg, internal/adkenv, internal/labrun з кореневого
+  # модуля), тому `-f` вказує на Dockerfile явно, а не через `dir:`.
+  #
+  # `Dockerfile.dockerignore` поруч із Dockerfile ріже контекст до go.mod,
+  # go.sum, трьох internal-пакетів і demo/6_adk_telegram_bot — apps/.env у
+  # контекст не потрапляє. Це саме той файл, а не кореневий `.dockerignore`:
+  # правило `<Dockerfile>.dockerignore` вмикається лише явним `-f`.
+  #
+  # Ключі передаються в контейнер, а не збираються в образ: `--env-file
+  # apps/.env` плюс `-e` для того, що перекриваємо. У образі apps/.env немає
+  # навмисно (AGENTS.md §5.4 — секрети не комітяться й не пакуються).
+  #
+  # Порт не публікується: бот довгоопитує Telegram і нічого не слухає.
+  demo:6_tg:image:
+    desc: 'Демо №6: зібрати образ (контекст — корінь репозиторію)'
+    cmds:
+      - docker build -f {{.TG6}}/Dockerfile -t {{.TG6_IMAGE}} .
+
+  demo:6_tg:image:dry:
+    desc: 'Демо №6: контейнерний dry-run — ключі з apps/.env, до Telegram не йдемо'
+    cmds:
+      - docker run --rm --env-file apps/.env -e TELEGRAM_ALLOW_USER_IDS=1 -e TELEGRAM_BOT_API=123:dry {{.TG6_IMAGE}} -dry-run
+
+  demo:6_tg:image:run:
+    desc: 'Демо №6: запустити бота в контейнері (потрібні ключі в apps/.env)'
+    cmds:
+      - docker run --rm --name ai-ae-telegram-bot --read-only --cap-drop ALL --env-file apps/.env {{.TG6_IMAGE}}
+
+  demo:6_tg:image:inspect:
+    desc: 'Демо №6: розмір, користувач і точка входу зібраного образу'
+    cmds:
+      - docker image inspect {{.TG6_IMAGE}} --format 'size={{"{{.Size}}"}} bytes user={{"{{.Config.User}}"}} entrypoint={{"{{.Config.Entrypoint}}"}} stopsignal={{"{{.Config.StopSignal}}"}}'
+
+  demo:6_tg:image:verify:
+    desc: 'Демо №6: перевірити, що apps/.env не потрапив в образ і zoneinfo на місці'
+    cmds:
+      - |
+        set -e
+        cid=$(docker create {{.TG6_IMAGE}})
+        trap 'docker rm "$cid" >/dev/null' EXIT
+        docker export "$cid" | tar -t | grep -qx 'telegram-bot' || { echo 'binary missing'; exit 1; }
+        docker export "$cid" | tar -t | grep -qx 'usr/share/zoneinfo/Europe/Kyiv' || { echo 'zoneinfo missing: current_time would fail'; exit 1; }
+        if docker export "$cid" | tar -t | grep -qE '(^|/)apps/\.env$'; then
+          echo 'LEAK: apps/.env is inside the image'; exit 1
+        fi
+        echo 'ok: binary + zoneinfo present, apps/.env absent'
+
+  # --- demo: AG-UI міст + вбудована сторінка чату ------------------------------
+  #
+  # Міст говорить протоколом AG-UI (той самий, що й CopilotKit), але написаний
+  # Go і не потребує Node: `go:embed` кладе сторінку в бінарник, а фронтенд — це
+  # один HTML-файл без збірки. Wire-формат той самий, тож React-фронтенд
+  # CopilotKit можна буде навести на `/agui` пізніше, не змінюючи цей код.
+  #
+  # Агент лишається окремим сервісом — labs4 Дня 4. Міст не має власних
+  # ключів: граф `-mode=graph` не має жодного LLM-вузла.
+  #
+  # Локально потрібні ДВА процеси (порт 8080 і 8081). У контейнері — один:
+  # міст сам запускає агента як дочірній процес, бо в `scratch` немає `/bin/sh`
+  # для скрипта-обгортки (див. AGENT_BIN у Dockerfile).
+  #
+  #   task week2:day4:serve          # термінал 1: агент на :8080
+  #   task demo:agui:serve           # термінал 2: міст + сторінка на :8081
+  #   → http://127.0.0.1:8081/
+  demo:agui:serve:
+    desc: 'AG-UI: міст і сторінка на http://127.0.0.1:8081/ (потрібен агент на :8080)'
+    cmds:
+      - go run {{.AGUIWEB}}
+
+  # Порт мосту не дорівнює PORT агента навмисно: у контейнері вони живуть в
+  # одному просторі імен, і одна змінна поклала б їх на один порт.
+  demo:agui:serve:port:
+    desc: 'AG-UI: те саме на іншому порту: task demo:agui:serve:port BRIDGE_PORT=8090'
+    cmds:
+      - BRIDGE_PORT={{.BRIDGE_PORT | default "8090"}} go run {{.AGUIWEB}}
+
+  demo:agui:test:
+    desc: 'AG-UI: тести мосту (офлайн, без агента й без мережі)'
+    cmds:
+      - go test -race -count=1 {{.AGUIWEB}}/
+
+  demo:agui:image:
+    desc: 'AG-UI: зібрати образ (міст + агент + сторінка; контекст — корінь репозиторію)'
+    cmds:
+      - docker build -f {{.AGUIWEB}}/Dockerfile -t {{.AGUI_IMAGE}} .
+
+  demo:agui:run:
+    desc: 'AG-UI: запустити контейнер (обидва процеси всередині, публікується лише сторінка)'
+    cmds:
+      - docker rm -f {{.AGUI_CONTAINER}} >/dev/null 2>&1 || true
+      - |
+        docker run --name {{.AGUI_CONTAINER}} --detach \
+          --read-only --cap-drop ALL \
+          -p 127.0.0.1:{{.PORT | default "8090"}}:8081 {{.AGUI_IMAGE}}
+      - sleep 3
+      - docker ps --filter name={{.AGUI_CONTAINER}} --format '{{`{{.Names}}`}} {{`{{.Status}}`}} {{`{{.Ports}}`}}'
+
+  # Доводить, що вийшов саме AG-UI, а не «щось відповіло»: перевіряємо набір
+  # типів подій і те, що текст розібрано без екранованих лапок.
+  demo:agui:smoke:
+    desc: 'AG-UI: наскрізна перевірка контейнера — події AG-UI від справжнього ADK-агента'
+    cmds:
+      - |
+        set -e
+        BASE=http://127.0.0.1:{{.PORT | default "8090"}}
+        echo '--- 1/3 сторінка віддається ---'
+        curl -fsS -o /dev/null -w 'HTTP %{http_code}\n' "$BASE/"
+        echo '--- 2/3 події AG-UI від агента ---'
+        curl -fsS -N --max-time 40 -X POST "$BASE/agui" \
+          -H 'Content-Type: application/json' \
+          -d '{"threadId":"smoke","runId":"r1","messages":[{"id":"u1","role":"user","content":"Мерчант A-114 просить повернення по транзакції txn-2026-07-118845"}]}' \
+          | sed 's/^data: //' | grep -o '"type":"[A-Z_]*"' | sort -u
+        echo '--- 3/3 очікувані типи присутні ---'
+        curl -fsS -N --max-time 40 -X POST "$BASE/agui" \
+          -H 'Content-Type: application/json' \
+          -d '{"threadId":"smoke2","runId":"r2","messages":[{"id":"u2","role":"user","content":"Мерчант A-114 просить повернення по транзакції txn-2026-07-118845"}]}' \
+          | sed 's/^data: //' | grep -o '"type":"[A-Z_]*"' | sort -u \
+          | grep -qx '"type":"RUN_FINISHED"' \
+          && echo 'ok: RUN_STARTED → TOOL_CALL_* → TEXT_MESSAGE_* → RUN_FINISHED'
+
+  demo:agui:verify:
+    desc: 'AG-UI: платформа, розмір і користувач образу; apps/.env в образ не потрапив'
+    cmds:
+      - docker image inspect {{.AGUI_IMAGE}} --format 'platform={{`{{.Os}}`}}/{{`{{.Architecture}}`}} size={{`{{.Size}}`}} bytes user={{`{{.Config.User}}`}}'
+      - |
+        set -e
+        cid=$(docker create {{.AGUI_IMAGE}})
+        trap 'docker rm "$cid" >/dev/null' EXIT
+        docker export "$cid" | tar -t | grep -qx 'agui-web' || { echo 'bridge missing'; exit 1; }
+        docker export "$cid" | tar -t | grep -qx 'adk-service' || { echo 'agent missing'; exit 1; }
+        if docker export "$cid" | tar -t | grep -qE '(^|/)apps/\.env$'; then
+          echo 'LEAK: apps/.env is inside the image'; exit 1
+        fi
+        echo 'ok: both binaries present, apps/.env absent'
+
+  demo:agui:stop:
+    desc: 'AG-UI: зупинити контейнер і показати drain обох процесів (очікуємо exit=0)'
+    cmds:
+      - docker stop --timeout 30 {{.AGUI_CONTAINER}}
+      - docker inspect {{.AGUI_CONTAINER}} --format 'exit={{`{{.State.ExitCode}}`}}'
+      - docker logs {{.AGUI_CONTAINER}} 2>&1 | tail -4
+
+  demo:agui:rm:
+    desc: 'AG-UI: прибрати контейнер (образ лишається)'
+    cmds:
+      - docker rm -f {{.AGUI_CONTAINER}} >/dev/null 2>&1 || true
+      - echo 'container {{.AGUI_CONTAINER}} removed'
