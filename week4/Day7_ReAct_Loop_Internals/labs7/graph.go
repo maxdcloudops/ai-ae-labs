@@ -23,9 +23,24 @@ type StepResult struct {
 }
 
 // NewGraphAgent збирає агента Start → react_loop.
+//
+// Та сама логіка, що в react.go, але крок — вузол графа, а цикл — динамічний
+// вузол. Різниця не в поведінці, а в тому, що кожна ітерація лишає подію в
+// event log: мануальний цикл треба інструментувати самому, графовий
+// інструментований за побудовою.
+//
+// Ціна цього — стан. `StepResult` їде в лог і має бути серіалізовним, тож
+// повний `react.Step` (із Calls і genai.Content усередині) у нього не
+// покладеш. Крок пише результат у `last`, а цикл читає його звідти. Це
+// прихована зв'язність між вузлами, якої в мануальній версії немає, і саме
+// вона — головна практична відмінність двох реалізацій.
 func NewGraphAgent(p react.Planner, reg react.Registry, b react.Budget) (agent.Agent, error) {
 	b = b.Normalized()
 	history := react.Seed("")
+	// last — міст між вузлом-кроком і циклом. Один агент = один прогін:
+	// workflowagent не ділить цей стан між паралельними інвокаціями, і для
+	// кількох одночасних запитів потрібен агент на запит.
+	var last react.Step
 
 	step := workflow.NewFunctionNode("plan_step",
 		func(ctx agent.Context, turn int) (StepResult, error) {
@@ -33,7 +48,7 @@ func NewGraphAgent(p react.Planner, reg react.Registry, b react.Budget) (agent.A
 			if err != nil {
 				return StepResult{}, err
 			}
-			// TODO(студент): збережіть s, щоб цикл нижче міг виконати s.Calls.
+			last = s
 			return StepResult{Iteration: turn, Thought: s.Thought, Calls: len(s.Calls), Final: s.Final}, nil
 		}, workflow.NodeConfig{})
 
@@ -41,7 +56,10 @@ func NewGraphAgent(p react.Planner, reg react.Registry, b react.Budget) (agent.A
 		func(ctx agent.Context, task string, _ func(*session.Event) error) (string, error) {
 			history = react.Seed(task)
 			for i := 1; ; i++ {
-				// TODO(студент): ліміт — той самий текст помилки й той самий ErrMaxIterations, що в react.go.
+				// Той самий текст і той самий сентинел, що в react.go:
+				// тести перевіряють обидві версії через errors.Is, і
+				// розбіжність тут означала б, що «еквівалентні» реалізації
+				// насправді відрізняються в єдиному місці, яке ловить збій.
 				if i > b.MaxIterations {
 					return "", fmt.Errorf("вичерпано ліміт %d ітерацій: %w", b.MaxIterations, ErrMaxIterations)
 				}
@@ -50,12 +68,16 @@ func NewGraphAgent(p react.Planner, reg react.Registry, b react.Budget) (agent.A
 					return "", fmt.Errorf("ітерація %d: %w", i, err)
 				}
 				if r.Final {
-					// TODO(студент): поверніть справжню відповідь кроку, а не думку.
-					return r.Thought, nil
+					// Answer, а не Thought: думка — це міркування вголос,
+					// відповідь — результат. Повернути Thought означало б
+					// віддати користувачу чернетку.
+					return last.Answer, nil
 				}
-				// TODO(студент): виконайте виклики кроку (reg.Invoke) і дайте
-				// history = history.Append(step, observations).
-				_ = reg
+				obs := make([]react.Observation, 0, len(last.Calls))
+				for _, call := range last.Calls {
+					obs = append(obs, reg.Invoke(ctx, call))
+				}
+				history = history.Append(last, obs)
 			}
 		}, workflow.NodeConfig{})
 

@@ -119,7 +119,6 @@ func (e *endless) NextStep(context.Context, react.History) (react.Step, error) {
 }
 
 func TestRunStopsAtIterationLimit(t *testing.T) {
-	t.Skip("прибрати, коли Run реалізовано")
 	_, _, err := Run(context.Background(), &endless{}, ledger.New().Tools(), "task", react.Budget{MaxIterations: 5})
 	if !errors.Is(err, ErrMaxIterations) {
 		t.Fatalf("err = %v; want errors.Is(err, ErrMaxIterations)", err)
@@ -127,7 +126,6 @@ func TestRunStopsAtIterationLimit(t *testing.T) {
 }
 
 func TestRunKeepsObservationsInCallOrder(t *testing.T) {
-	t.Skip("прибрати, коли Run реалізовано")
 	_, tr, err := Run(context.Background(), &react.RulePlanner{}, ledger.New().Tools(), "task", react.Budget{})
 	if err != nil {
 		t.Fatal(err)
