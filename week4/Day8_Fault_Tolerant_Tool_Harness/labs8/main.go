@@ -66,7 +66,42 @@ var ErrSelfCorrectionExhausted = errors.New("self-correction budget exhausted")
 //
 // Другий результат — текст для логу або для моделі.
 func classifyError(err error) (Class, string) {
-	return ClassFatal, err.Error() // заглушка: поки що кожна помилка фатальна
+	if err == nil {
+		return ClassFatal, ""
+	}
+
+	// Порядок перевірок — це сама класифікація, і він не довільний.
+	//
+	// context.Canceled ПЕРШИМ. Скасування приходить згори: користувач закрив
+	// вкладку, деплой зупиняє под. Повторювати його означає ігнорувати
+	// рішення, яке вже ухвалене, і витрачати гроші на відповідь, яку ніхто
+	// не прочитає. Це «зупинись», а не «спробуй ще».
+	if errors.Is(err, context.Canceled) {
+		return ClassFatal, "скасовано згори: повтор не має сенсу"
+	}
+
+	// Семантична ДО транзієнтної. Помилка може задовольняти обидві перевірки
+	// (обгортки складаються), і тоді вирішує порядок: «неправильний аргумент»
+	// не стає правильним від повтору, скільки б разів ми не спробували.
+	var se *ledger.SemanticError
+	if errors.As(err, &se) {
+		return ClassSurfaceToModel, fmt.Sprintf("поле %s: %s", se.Field, se.Reason)
+	}
+	if errors.Is(err, ledger.ErrSemantic) {
+		return ClassSurfaceToModel, err.Error()
+	}
+
+	// DeadlineExceeded — транзієнтна, на відміну від Canceled. Різниця
+	// принципова: дедлайн означає «цього разу не встигли», скасування —
+	// «більше не треба».
+	if errors.Is(err, ledger.ErrTransient) || errors.Is(err, context.DeadlineExceeded) {
+		return ClassRetryTransient, err.Error()
+	}
+
+	// Невідому помилку наосліп не повторюють: вона може бути успішним
+	// записом, який не доїхав відповіддю, і другий виклик зробить другий
+	// возврат.
+	return ClassFatal, "невідомий клас помилки: " + err.Error()
 }
 
 // Observation — те, що модель читає після виклику, який не вдався.
@@ -99,7 +134,45 @@ type budget struct{ used int }
 // error, що обгортає ErrSelfCorrectionExhausted (явний фейл, а не тиха зупинка).
 // Транзієнтна помилка після вичерпання повторів → Observation{Status: "unavailable"}.
 func (b *budget) observe(err error) (Observation, error) {
-	return Observation{}, err // заглушка: прокидаємо все
+	if err == nil {
+		return Observation{}, nil
+	}
+	class, msg := classifyError(err)
+
+	switch class {
+	case ClassSurfaceToModel:
+		b.used++
+		if b.used > maxSelfCorrections {
+			// Явний фейл, а не тиха зупинка: модель, яка тричі поспіль
+			// подала неправильний аргумент, не виправиться з четвертої
+			// спроби — вона не розуміє контракт. Мовчазне припинення тут
+			// виглядало б як «нічого не знайдено».
+			return Observation{}, fmt.Errorf(
+				"%w: %d семантичних помилок поспіль, остання — %s",
+				ErrSelfCorrectionExhausted, b.used-1, msg)
+		}
+		var se *ledger.SemanticError
+		field := ""
+		if errors.As(err, &se) {
+			field = se.Field
+		}
+		// Помилка НЕ повертається як error — вона стає спостереженням, яке
+		// модель прочитає і виправить наступний хід. У цьому вся ідея
+		// самокорекції: межа каже, що саме не так, а не «bad request».
+		return Observation{
+			Status: "invalid_argument", Field: field,
+			Observation: msg, Attempt: b.used,
+		}, nil
+
+	case ClassRetryTransient:
+		// Сюди ми потрапляємо вже ПІСЛЯ того, як повтори вичерпані: сам
+		// повтор робить рушій. Моделі кажемо «джерело недоступне», щоб вона
+		// не вигадала відповідь і не повторила виклик власноруч.
+		return Observation{Status: "unavailable", Observation: msg}, nil
+
+	default:
+		return Observation{}, err
+	}
 }
 
 // retry — стенд-ін для Temporal RetryPolicy. Крок 3 замінює його на Activity з
