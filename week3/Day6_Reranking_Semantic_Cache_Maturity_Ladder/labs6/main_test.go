@@ -316,3 +316,118 @@ func TestChunksPath(t *testing.T) {
 		t.Errorf("chunksPath(my.json) = %q", got)
 	}
 }
+
+// --- Семантичний кеш і multi-hop (докази для README) -------------------------
+
+func liveRetriever(t *testing.T) *retriever {
+	t.Helper()
+	chunks, err := corpus.Load("testdata/chunks.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newRetriever(chunks, embed.New())
+}
+
+func runQuery(t *testing.T, r *retriever, q string) string {
+	t.Helper()
+	a, err := newGraph(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := labrun.Run(context.Background(), a, q)
+	if err != nil {
+		t.Fatalf("run %q: %v", q, err)
+	}
+	return res.Final
+}
+
+// TestMultiHopReturnsBothHalves — запит Оксани має повернути ОБИДВА факти.
+//
+// Саме той випадок, де наївний vector-RAG дає половину відповіді: список
+// мерчантів знаходить, підписанта — ні.
+func TestMultiHopReturnsBothHalves(t *testing.T) {
+	r := liveRetriever(t)
+	got := runQuery(t, r, "які мерчанти на тарифі T-2 підпадають під вимогу НБУ 2026 і хто підписував їхні договори?")
+
+	for _, want := range []string{"t-tariffs", "c-sign-014"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("у відповіді немає %q — повернуто лише половину:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, "3.2 Contract signers") {
+		t.Error("немає розділу з підписантами — другий hop не спрацював")
+	}
+}
+
+// TestSemanticCacheHitsOnParaphrase — перефразований запит має влучити.
+//
+// Звичайний кеш по рядку тут промахнувся б: рядки різні. Семантичний
+// порівнює вектори запитів, тому «скільки коштує» і «яка ставка» — один запит.
+func TestSemanticCacheHitsOnParaphrase(t *testing.T) {
+	r := liveRetriever(t)
+
+	first := runQuery(t, r, "яка ставка комісії на тарифі T-2?")
+	if !strings.Contains(first, "cache_hit=false") {
+		t.Fatalf("перший запит мав бути miss:\n%s", first)
+	}
+	if r.lastCache.Hit {
+		t.Error("lastCache каже hit на першому запиті")
+	}
+
+	same := runQuery(t, r, "яка ставка комісії на тарифі T-2?")
+	if !strings.Contains(same, "cache_hit=true") {
+		t.Errorf("точний повтор мав дати hit (score=%.3f):\n%s", r.lastCache.Score, same)
+	}
+
+	// Перефразування: вимірюємо, але НЕ вимагаємо влучання.
+	//
+	// Стаб-ембеддер лексичний (хешовані триграми), тож поводиться рівно
+	// навпаки потрібного: перефразування не впізнає, а майже однакові рядки
+	// вважає однаковими. Виміряний score тут ~0.48 при порозі 0.92 — тобто
+	// на стабі семантичний кеш працює як звичайний. Саме тому умова й каже
+	// калібрувати поріг на справжній моделі; з OLLAMA_EMBED_MODEL це число
+	// треба переміряти.
+	_ = runQuery(t, r, "скільки відсотків комісії за тарифом T-2?")
+	t.Logf("перефразування на стабі: hit=%t score=%.3f (поріг %.2f)",
+		r.lastCache.Hit, r.lastCache.Score, semThreshold)
+
+	// А ось це — вимога, і вона важливіша за влучання. Запит про T-1 не
+	// сміє отримати відповідь про T-2: саме тут кеш може збрехати дорого.
+	// Тримається не на порозі косинуса (T-1 і T-2 відрізняються одним
+	// символом, і будь-який ембеддер дасть їм високу схожість), а на
+	// лексичному запобіжнику termKey.
+	other := runQuery(t, r, "яка ставка комісії на тарифі T-1?")
+	if strings.Contains(other, "cache_hit=true") {
+		t.Errorf("запит про T-1 отримав відповідь із кеша про T-2:\n%s", other)
+	}
+}
+
+// TestRerankChangesOrder фіксує порядок «до/після» для README.
+func TestRerankChangesOrder(t *testing.T) {
+	r := liveRetriever(t)
+	runQuery(t, r, "які мерчанти на тарифі T-2 підпадають під вимогу НБУ 2026 і хто підписував їхні договори?")
+
+	tr := r.lastRerank
+	if len(tr.Before) == 0 || len(tr.After) == 0 {
+		t.Fatal("слід re-ranking порожній")
+	}
+	t.Logf("class=%s steps=%d\nдо:    %v\nпісля: %v", tr.Class, tr.Steps, tr.Before, tr.After)
+	if tr.Steps == 0 {
+		t.Error("Steps = 0 — бюджет не рахується")
+	}
+}
+
+// TestBudgetIsRespected — бюджет кроків не перевищується.
+func TestBudgetIsRespected(t *testing.T) {
+	for _, q := range []string{
+		"які мерчанти на тарифі T-2 і хто підписував їхні договори?",
+		"що таке SOC2?",
+		"тариф T-1",
+	} {
+		r := liveRetriever(t)
+		runQuery(t, r, q)
+		if got, limit := r.lastRerank.Steps, budgetFor(r.lastRerank.Class); got > limit {
+			t.Errorf("%q: кроків %d, бюджет %d", q, got, limit)
+		}
+	}
+}

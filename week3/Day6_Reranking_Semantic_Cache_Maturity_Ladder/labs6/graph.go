@@ -6,34 +6,57 @@ import (
 	"google.golang.org/adk/v2/workflow"
 )
 
-// newGraph збирає retrieval-конвеєр — це файл, де ви змінюєте топологію.
+// newGraph збирає agentic retrieval-граф.
 //
-// Стартер — лінійний ланцюжок:
+//	Start → cache_check ─┬─ "hit"  → serve_cached
+//	                     └─ "miss" → classify ─┬─ vector_search    ─┐
+//	                                           ├─ graph_filter      ├─ join → rerank → format
+//	                                           └─ graph_traversal  ─┘
 //
-//	Start → search → rerank → answer
+// Три речі, які варто прочитати як рішення, а не як схему.
 //
-// TODO(студент): Homework п.1 — agentic-граф через workflow.NewEdgeBuilder:
+// **Кеш стоїть ПЕРШИМ.** Поставити його після classify означало б платити за
+// планування на кожному повторі. Hit має коштувати один embed запиту — і все.
 //
-//	Start → cache_check → classify ─┬─ vector_search   ─┐
-//	                                ├─ graph_filter     ├─ JoinNode → rerank → format
-//	                                └─ graph_traversal ─┘
+// **Гілки — fan-out, а не вибір.** Класифікатор емітує клас запиту, але всі
+// три гілки виконуються паралельно, і кожна сама вирішує, чи їй є що сказати:
+// graph_traversal на single-hop просто повертає порожньо. Так виходить дешевше,
+// ніж будувати маршрутизацію й помилятися в ній: гілка коштує мілісекунди,
+// а пропущений hop — половини відповіді.
 //
-// classify — workflow.NewEmittingFunctionNode з маршрутами single-hop /
-// multi-hop / global / metadata-filter; збір гілок — workflow.NewJoinNode.
-// Еталон fan-out + JoinNode:
-// https://github.com/google/adk-go/blob/v2.5.0/examples/workflow/complex/main.go
+// **JoinNode — єдиний легальний спосіб звести гілки.** Більш ніж одне
+// безумовне вхідне ребро у звичайний вузол ADK відхиляє
+// (ErrUnsupportedFanIn); бар'єр мусить бути JoinNode, і його вихід —
+// map[string]any з ключем за іменем попередника.
 func newGraph(r *retriever) (agent.Agent, error) {
 	// Без retry: вузли локальні, повтор не змінить результат.
 	cfg := workflow.NodeConfig{}
-	edges := workflow.Chain(
-		workflow.Start,
-		workflow.NewFunctionNode("search", r.search, cfg),
-		workflow.NewFunctionNode("rerank", r.rerank, cfg),
-		workflow.NewFunctionNode("answer", r.answer, cfg),
-	)
+
+	cacheCheck := workflow.NewEmittingFunctionNode("cache_check", r.cacheCheck, cfg)
+	serveCached := workflow.NewFunctionNode("serve_cached", r.serveFromCache, cfg)
+	classify := workflow.NewEmittingFunctionNode("classify", r.classify, cfg)
+
+	vectorSearch := workflow.NewFunctionNode("vector_search", r.vectorSearch, cfg)
+	graphFilter := workflow.NewFunctionNode("graph_filter", r.graphFilter, cfg)
+	graphTraversal := workflow.NewFunctionNode("graph_traversal", r.graphTraversal, cfg)
+
+	join := workflow.NewJoinNode("join")
+	rerank := workflow.NewFunctionNode("rerank", r.mergeAndRerank, cfg)
+	format := workflow.NewFunctionNode("format", r.format, cfg)
+
+	edges := workflow.NewEdgeBuilder().
+		Add(workflow.Start, cacheCheck).
+		AddRoute(cacheCheck, serveCached, workflow.StringRoute("hit")).
+		AddRoute(cacheCheck, classify, workflow.Default).
+		AddFanOut(classify, vectorSearch, graphFilter, graphTraversal).
+		AddFanIn(join, vectorSearch, graphFilter, graphTraversal).
+		Add(join, rerank).
+		Add(rerank, format).
+		Build()
+
 	return workflowagent.New(workflowagent.Config{
-		Name:        "high_precision_rag",
-		Description: "Retrieval-конвеєр: пошук → re-rank → відповідь із provenance + кеш відповідей.",
+		Name:        "agentic_graphrag",
+		Description: "Agentic GraphRAG: семантичний кеш, планувальник, три гілки retrieval, re-ranking і відповідь із provenance.",
 		Edges:       edges,
 	})
 }

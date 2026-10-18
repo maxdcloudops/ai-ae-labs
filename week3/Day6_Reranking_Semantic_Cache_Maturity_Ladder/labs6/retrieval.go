@@ -11,6 +11,7 @@ import (
 	"google.golang.org/adk/v2/agent"
 
 	"github.com/dimetron/ai-eng-course/labs/week3/Day6_Reranking_Semantic_Cache_Maturity_Ladder/labs6/internal/corpus"
+	"github.com/dimetron/ai-eng-course/labs/week3/Day6_Reranking_Semantic_Cache_Maturity_Ladder/labs6/internal/embed"
 )
 
 // Candidate — кандидат retrieval з оцінкою і provenance.
@@ -44,6 +45,32 @@ const topK = 5
 type answerCache struct {
 	mu sync.Mutex
 	m  map[string]string
+	// sem — семантичні записи: вектор запиту поруч із відповіддю.
+	sem []semEntry
+}
+
+// semEntry — один запис семантичного кеша.
+//
+// Ключ ізолює корпус і tenant: інакше оновлення корпусу мовчки віддавало б
+// стару відповідь, а два клієнти бачили б чужі дані. TTL тут не реалізовано —
+// корпус у пам'яті процесу й живе рівно до рестарту; у README це сказано.
+type semEntry struct {
+	Key    string
+	Terms  string
+	Vector []float32
+	Answer string
+}
+
+// semThreshold — поріг косинусної схожості для семантичного влучання.
+//
+// 0.92 — стартова гіпотеза з умови, не істина. На стаб-ембедингах вона
+// завищена (стаб дає інший розподіл, ніж модель), тож калібрований поріг для
+// Ollama й для стаба відрізняється — у README зафіксовано, на чому міряли.
+const semThreshold = 0.92
+
+// cacheKey ізолює tenant, версію корпусу й політику доступу.
+func cacheKey(tenant, corpusVersion string) string {
+	return tenant + "|" + corpusVersion
 }
 
 func (c *answerCache) get(query string) (string, bool) {
@@ -51,6 +78,56 @@ func (c *answerCache) get(query string) (string, bool) {
 	defer c.mu.Unlock()
 	v, ok := c.m[normalize(query)]
 	return v, ok
+}
+
+// getSemantic шукає за схожістю вектора запиту, а не за рядком.
+//
+// Саме це відрізняє семантичний кеш від звичайного: «скільки коштує X?» і
+// «яка ціна X?» — один запит, але різні рядки, і map-lookup промахнеться.
+func (c *answerCache) getSemantic(key, query string, vec []float32) (string, float64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	terms := termKey(query)
+	best, bestScore := "", 0.0
+	for _, e := range c.sem {
+		if e.Key != key {
+			continue
+		}
+		// Лексичний запобіжник ПЕРЕД косинусом. «Тариф T-1» і «тариф T-2»
+		// відрізняються одним символом, і будь-який ембеддер дасть їм високу
+		// схожість — а відповіді в них протилежні. Точні значення мають
+		// збігатися точно, інакше кеш почне впевнено брехати саме там, де
+		// ціна помилки найбільша.
+		if e.Terms != terms {
+			continue
+		}
+		if s := embed.Cosine(vec, e.Vector); s > bestScore {
+			best, bestScore = e.Answer, s
+		}
+	}
+	if bestScore >= semThreshold {
+		return best, bestScore, true
+	}
+	return "", bestScore, false
+}
+
+// termKey — відсортовані точні значення запиту (коди, тарифи, періоди).
+// Саме вони не підлягають «приблизному» збігу.
+func termKey(query string) string {
+	var out []string
+	for _, t := range tokens(query) {
+		if strings.ContainsAny(t, "-0123456789") {
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return strings.Join(out, ",")
+}
+
+func (c *answerCache) putSemantic(key, query string, vec []float32, answer string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sem = append(c.sem, semEntry{Key: key, Terms: termKey(query), Vector: vec, Answer: answer})
 }
 
 func (c *answerCache) put(query, answer string) {
@@ -93,6 +170,10 @@ type retriever struct {
 	chunks []corpus.Chunk
 	cache  answerCache
 	emb    embedder
+	// lastRerank — порядок «до/після» останнього прогону. Потрібен README:
+	// без нього твердження «re-ranking змінив топ» нічим не підтвердити.
+	lastRerank rerankTrace
+	lastCache  cacheTrace
 }
 
 func newRetriever(chunks []corpus.Chunk, emb embedder) *retriever {
