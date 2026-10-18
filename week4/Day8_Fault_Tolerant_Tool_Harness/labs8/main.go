@@ -220,12 +220,52 @@ If a tool returns status "invalid_argument", read the observation, fix the named
 If a tool returns status "unavailable" or "stopped", do not call it again; tell the user what happened.`
 
 func main() {
-	faultsFlag := flag.String("faults", "", "scripted acquirer faults, e.g. 503,timeout (a queue, not a probability)")
-	flag.Parse()
-	if flag.NArg() == 0 {
-		log.Fatal("usage: go run . [-faults 503,timeout] MESSAGE")
+	// Підкоманду знімаємо ДО flag.Parse: інакше `worker -faults 503` лишить
+	// прапорець у Args і він мовчки не застосується.
+	args := os.Args[1:]
+	cmd := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "worker", "start", "counter":
+			cmd, args = args[0], args[1:]
+		}
+	}
+
+	fs := flag.NewFlagSet("labs8", flag.ExitOnError)
+	faultsFlag := fs.String("faults", "", "scripted acquirer faults, e.g. 503,timeout (a queue, not a probability)")
+	sessionFlag := fs.String("session", "s1", "session id: той самий id продовжує розмову")
+	if err := fs.Parse(args); err != nil {
+		log.Fatal(err)
 	}
 	ctx := context.Background()
+
+	// Durable-шлях: цикл живе в Temporal, стан переживає падіння процесу.
+	if cmd != "" {
+		faults, err := parseFaults(*faultsFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		switch cmd {
+		case "worker":
+			err = runWorker(ctx, faults)
+		case "start":
+			if fs.NArg() == 0 {
+				log.Fatal("usage: go run . start [-session s1] MESSAGE")
+			}
+			err = runStart(ctx, *sessionFlag, strings.Join(fs.Args(), " "))
+		case "counter":
+			err = runCounter(ctx)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	// Одно-процесний шлях (без Temporal): лишився для порівняння.
+	if fs.NArg() == 0 {
+		log.Fatal("usage: go run . [-faults 503,timeout] MESSAGE\n   or: go run . worker | start | counter")
+	}
 
 	m, err := pickModel(ctx)
 	if err != nil {
@@ -267,7 +307,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	msg := genai.NewContentFromText(strings.Join(flag.Args(), " "), genai.RoleUser)
+	msg := genai.NewContentFromText(strings.Join(fs.Args(), " "), genai.RoleUser)
 	for ev, err := range r.Run(ctx, "taras", "s1", msg, agent.RunConfig{}) {
 		if err != nil {
 			log.Fatalf("[ev:failed] %v", err)

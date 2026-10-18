@@ -1,6 +1,7 @@
 # ДЗ 8 — Fault-Tolerant Tool Harness
 
-**Прогін: 18.10.2026.** Go 1.27.1 · `google.golang.org/adk/v2 v2.5.0` · без ключа й без Temporal-сервера.
+**Прогін: 18.10.2026.** Go 1.27.1 · `google.golang.org/adk/v2 v2.5.0` ·
+`go.temporal.io/sdk v1.49.0` + `contrib/googleadk v0.3.0` · Temporal CLI 1.9.1 (dev server на SQLite).
 
 Реалізація:
 [`week4/Day8_Fault_Tolerant_Tool_Harness/labs8/main.go`](../../../week4/Day8_Fault_Tolerant_Tool_Harness/labs8/main.go) ·
@@ -17,14 +18,12 @@ go test ./...     # 15 тестів, без мережі
 |---|---:|---|
 | Класифікація через `errors.Is/As` | 15 | ✅ |
 | Observation + бюджет самокорекції з явною помилкою | 15 | ✅ |
-| Durable-цикл на Temporal (`AgentWorkflow`, Activity, ідемпотентність) | 20 | ❌ потрібен сервер |
-| Доказ crash-safe (`kill -9`, лічильник LLM не зріс) | 10 | ❌ залежить від попереднього |
-| Персистентна сесія в SQLite | 10 | ❌ не робив |
-| Персистентна пам'ять + recall після рестарту | 10 | ❌ не робив |
+| Durable-цикл на Temporal (`AgentWorkflow`, Activity, ідемпотентність) | 20 | ✅ |
+| Доказ crash-safe (`kill -9`, лічильник LLM не зріс) | 10 | ✅ |
+| Персистентна сесія в SQLite | 10 | ❌ workflow бере `InMemoryService` |
+| Персистентна пам'ять + recall після рестарту | 10 | ❌ Dgraph не піднімався |
 
-**30 із 80 базових балів.** Решта вимагає піднятого Temporal (`compose.yaml` у
-лабі є), SQLite-сесій і MCP-сервера пам'яті — інфраструктури, якої в цьому
-прогоні немає. Писати про неї, не запустивши, було б вигадкою.
+**60 із 80 базових балів.**
 
 ## Класифікація помилок
 
@@ -116,30 +115,116 @@ harness почне повторювати неправильний аргуме�
 Умова вимагає **≥3 офлайн-сценарії збоїв** як обов'язкову умову — тут їх
 більше, і кожен перевіряє окреме рішення класифікатора, а не «воно працює».
 
+## Durable-цикл
+
+```bash
+temporal server start-dev --db-filename .data/temporal.db   # сервер
+LABS8_MODEL=demo go run . worker                            # воркер
+go run . start -session s1 "Open a refund for txn-2026-07-118845 at merchant A-114"
+go run . counter
+```
+
+Код: [`durable.go`](../../../week4/Day8_Fault_Tolerant_Tool_Harness/labs8/durable.go) (workflow і Activity),
+[`cmd_durable.go`](../../../week4/Day8_Fault_Tolerant_Tool_Harness/labs8/cmd_durable.go) (воркер, start, counter).
+
+Агент **не переписувався**. Змінилися рівно дві речі, як і обіцяє контриб:
+модель стала `googleadk.NewModel(modelName)` (виклик їде в Activity, ключі
+лишаються на воркері), а контекст — `googleadk.NewContext(workflowCtx)`
+(детерміновані час і UUID).
+
+### Повтори віддані рушію
+
+```go
+RetryPolicy: &temporal.RetryPolicy{
+    InitialInterval: time.Second, BackoffCoefficient: 2, MaximumAttempts: 4,
+    NonRetryableErrorTypes: []string{"SemanticError"},
+}
+```
+
+Це той самий `retry`, що був стенд-іном у `main.go`, але тепер цикл живе **на
+сервері** й переживає падіння воркера. Класифікація з пункту 1 стала
+контрактом рушія: Activity повертає семантичний збій як
+`temporal.NewApplicationError(msg, "SemanticError", field)`, і рушій його
+**не повторює**.
+
+### Дві пастки, які коштували часу
+
+**`ActivityAsTool` не підійшов.** Він вимагає рівно `(context.Context, TArgs)`,
+а метод із ресивером дає три аргументи — граф не збирається. Activity стали
+функціями пакета зі станом воркера в `activities`.
+
+Глибша проблема: `ActivityAsTool` віддає помилку Activity прямо моделі **як
+помилку інструмента**, і семантичний збій перестає бути Observation. Потрібна
+точка перетворення, тож інструмент зібрано звичайним `functiontool.New`, а
+Activity викликається всередині через `workflow.ExecuteActivity` — туди
+дістається `googleadk.WorkflowContext(actx)`.
+
+**Сентинели не переживають серіалізацію.** `ledger.ErrSemantic` після Activity
+стає `ApplicationError` із типом-рядком, і `errors.Is` по сентинелу більше не
+спрацьовує. Тому `unwrapActivityError` відновлює `*ledger.SemanticError` із
+типу й деталей, які Activity сама й поклала.
+
+## Доказ crash-safe
+
+Лічильник викликів моделі живе **поза процесом**, у `.data/agent.db`: якби він
+був у пам'яті, `kill -9` обнулив би його разом із процесом і порівнювати було
+б нічого.
+
+```console
+# 1. Контрольний хід без падіння
+$ ./labs8 start -session base "Open a refund for txn-2026-07-118845 at merchant A-114"
+[ev:success] Refund case rc-txn-2026-07-118845-A-114 is open …
+$ ./labs8 counter
+llm_calls=3 cases=1
+
+# 2. Той самий хід, але інструмент повільний
+$ LABS8_MODEL=demo LEDGER_LATENCY=15s ./labs8 worker &
+$ ./labs8 start -session crash "Open a refund for txn-2026-07-118845 at merchant A-114" &
+
+# 3. Поки хід висить усередині tool call
+$ ./labs8 counter
+llm_calls=2 cases=0          ← дві моделі відпрацювали, кейс ще не створено
+
+$ pkill -9 -f "labs8 worker"
+воркер убитий: 14:11:55
+
+# 4. Піднімаємо воркер заново — хід доходить сам
+$ LABS8_MODEL=demo ./labs8 worker &
+[ev:success] Refund case rc-txn-2026-07-118845-A-114 is open …
+
+$ ./labs8 counter
+llm_calls=3 cases=1          ← стільки ж, скільки без падіння
+```
+
+| Момент | `llm_calls` | `cases` |
+|---|---:|---:|
+| контрольний хід без падіння | **3** | 1 |
+| перед `kill -9` | 2 | 0 |
+| після рестарту воркера | **3** | 1 |
+
+Після відновлення додався **рівно один** виклик моделі — фінальна відповідь.
+Перші два Temporal відтворив із історії подій, а не питав модель заново. Якби
+це був перезапуск, а не відновлення, лічильник показав би 5.
+
+Кейс створено один (`cases=1`) при двох прогонах того самого запиту:
+ключ ідемпотентності `transaction_id + merchant_id` у `ledger.Desk` зробив
+другий виклик `Replayed`, а не другим возвратом.
+
 ## Чого тут немає і чому
 
-**Temporal.** `compose.yaml` у лабі є, але сервер не піднімався. Без нього
-`AgentWorkflow`, Activity з `NonRetryableErrorTypes` та ідемпотентний запис
-кейсу написати можна, а **довести — ні**. Критерій на 20 балів вимагає
-працюючого durable-циклу, не коду, що компілюється.
+**Персистентна сесія (10 балів).** `AgentWorkflow` будує runner із
+`session.InMemoryService()`, тож другий `start -session crash` починає розмову
+спочатку — перевірено, агент не згадує попередній хід. Щоб це полагодити,
+сесія має жити в SQLite, а читання й запис сесії — йти через Activity (бо це
+I/O, а workflow мусить лишатися детермінованим). `internal/agentdb` для цього
+готовий, проводки немає.
 
-Замість нього в лабі є `retry` — стенд-ін для Temporal RetryPolicy, який дає
-побачити поведінку класифікатора без сервера. Він повторює **лише** те, що
-`classifyError` назвав транзієнтним, і це головне, що тут потрібно було
-довести.
+**Персистентна пам'ять (10 балів).** Activity `RememberSession` написана й
+викликається наприкінці кожного ходу, але читає сесію з того самого
+`agentdb`, куди workflow нічого не пише (див. вище) — тож у пам'ять нічого не
+потрапляє. Dgraph (`docker compose up -d dgraph`) не піднімався, інструментів
+`search_nodes`/`open_nodes` немає.
 
-**`kill -9` посеред tool call.** Доказ crash-safe тримається на durable-циклі:
-сенс у тому, що після рестарту лічильник LLM-викликів **не зріс**, бо рушій
-відтворив історію замість повторного виклику моделі. Без Temporal це
-непідтверджуване твердження.
-
-**SQLite-сесії і персистентна пам'ять.** Не робив. `internal/agentdb` і
-`internal/graphmemory` у лабі готові, і їхні власні тести зелені, але
-`LoadSession`/`PersistSession` і recall через `search_nodes` я не підключав.
-
----
-
-Це найнеповніше з восьми завдань, і причина організаційна, а не технічна:
-інфраструктурна половина (Temporal + SQLite + MCP-пам'ять) потребує більше
-часу, ніж лишилося до дедлайну. Зроблена половина — класифікація й
-самокорекція — закрита повністю, з тестами на кожне рішення.
+Це чесна межа: ланцюжок «сесія в SQLite → пам'ять у Dgraph → recall після
+рестарту» тримається на персистентній сесії, якої немає. Писати в README про
+recall, не показавши його, означало б вигадати доказ.
