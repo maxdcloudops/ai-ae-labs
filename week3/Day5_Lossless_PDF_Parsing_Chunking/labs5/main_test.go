@@ -45,6 +45,9 @@ import (
 	"google.golang.org/adk/v2/agent"
 
 	"github.com/dimetron/ai-eng-course/labs/internal/labrun"
+	"github.com/dimetron/ai-eng-course/labs/week3/Day5_Lossless_PDF_Parsing_Chunking/labs5/internal/chunkeval"
+	"github.com/dimetron/ai-eng-course/labs/week3/Day5_Lossless_PDF_Parsing_Chunking/labs5/internal/kgraph"
+	"github.com/dimetron/ai-eng-course/labs/week3/Day5_Lossless_PDF_Parsing_Chunking/labs5/internal/vecindex"
 )
 
 // nodeCtx — суворий фейк agent.Context. Вбудований StrictContextMock означає:
@@ -180,26 +183,100 @@ func TestDoclingFixtureKeepsTables(t *testing.T) {
 
 // --- Вузол chunk -------------------------------------------------------------
 
-// TestChunk_Stub фіксує ПОТОЧНУ поведінку заглушки: один чанк на весь документ.
+// TestChunk_Hierarchy перевіряє Parent-Child ієрархію (замінив тест заглушки).
 //
-// TODO(студент): щойно ви реалізуєте Parent-Child chunking, цей тест має
-// впасти — і це правильно. Замініть його на перевірку вашої ієрархії:
-// скільки parents, скільки children, чи в кожного child заповнений ParentID
-// і SectionPath, чи Level зростає всередині розділу.
-func TestChunk_Stub(t *testing.T) {
+// Таблична форма: кожен кейс — окремий документ і очікувана форма нарізки.
+// Головне, що тут фіксується: підрозділ (Depth > 1) НЕ створює нового parent,
+// а лише подовжує SectionPath — так само влаштована фікстура ДЗ 6.
+func TestChunk_Hierarchy(t *testing.T) {
 	t.Parallel()
-	got, err := chunk(newNodeCtx(), newDocument("d1", "", "# Розділ\n\nабзац\n"))
+	for _, tc := range []struct {
+		name         string
+		md           string
+		wantParents  int
+		wantChildren int
+		wantPath     string
+	}{
+		{
+			name:        "розділ з абзацом",
+			md:          "# 1 Розділ\n\nабзац\n",
+			wantParents: 1, wantChildren: 1, wantPath: "1 Розділ",
+		},
+		{
+			name:        "підрозділ подовжує шлях, але не створює parent",
+			md:          "# 1 Розділ\n\n## 1.1 Підрозділ\n\nабзац\n",
+			wantParents: 1, wantChildren: 1, wantPath: "1 Розділ / 1.1 Підрозділ",
+		},
+		{
+			name:        "новий розділ скидає глибші рівні",
+			md:          "# 1 Перший\n\n## 1.1 Під\n\nа\n\n# 2 Другий\n\nб\n",
+			wantParents: 2, wantChildren: 2, wantPath: "2 Другий",
+		},
+		{
+			name:        "блок до першого заголовка дістає неявного parent",
+			md:          "абзац без заголовка\n",
+			wantParents: 1, wantChildren: 1, wantPath: "d1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := chunk(newNodeCtx(), newDocument("d1", "", tc.md))
+			if err != nil {
+				t.Fatalf("chunk() error = %v", err)
+			}
+			var parents, children int
+			var lastPath string
+			for _, c := range got.Chunks {
+				if c.ParentID == "" {
+					parents++
+					if c.Level != 0 {
+						t.Errorf("parent %s має Level %d, очікували 0", c.ID, c.Level)
+					}
+					continue
+				}
+				children++
+				lastPath = c.SectionPath
+				if c.Level != 2 {
+					t.Errorf("child %s має Level %d, очікували 2", c.ID, c.Level)
+				}
+				if c.DocumentID == "" {
+					t.Errorf("child %s без DocumentID", c.ID)
+				}
+			}
+			if parents != tc.wantParents || children != tc.wantChildren {
+				t.Fatalf("parents/children = %d/%d, очікували %d/%d",
+					parents, children, tc.wantParents, tc.wantChildren)
+			}
+			if lastPath != tc.wantPath {
+				t.Errorf("SectionPath останнього child = %q, очікували %q", lastPath, tc.wantPath)
+			}
+		})
+	}
+}
+
+// TestChunk_LongTextSplitsBySentences — довгий абзац ріжеться, але по реченнях.
+func TestChunk_LongTextSplitsBySentences(t *testing.T) {
+	t.Parallel()
+	long := "# 1 Розділ\n\n" + strings.Repeat("Це речення має рівно кілька слів усередині. ", 60) + "\n"
+	got, err := chunk(newNodeCtx(), newDocument("d1", "", long))
 	if err != nil {
 		t.Fatalf("chunk() error = %v", err)
 	}
-	if len(got.Chunks) != 1 {
-		t.Fatalf("заглушка має повертати 1 чанк, отримали %d — схоже, ви вже реалізували chunking; перепишіть цей тест", len(got.Chunks))
+	var children int
+	for _, c := range got.Chunks {
+		if c.ParentID == "" {
+			continue
+		}
+		children++
+		if n := chunkeval.Tokens(c.Text); n > maxChildTokens {
+			t.Errorf("child %s має %d токенів, стеля %d", c.ID, n, maxChildTokens)
+		}
+		if !strings.HasSuffix(strings.TrimSpace(c.Text), ".") {
+			t.Errorf("child %s обірвано не на межі речення: %q", c.ID, c.Text)
+		}
 	}
-	if got.Chunks[0].ParentID != "" {
-		t.Errorf("ParentID кореневого чанка = %q, очікували порожній", got.Chunks[0].ParentID)
-	}
-	if got.Chunks[0].DocumentID != "d1" {
-		t.Errorf("DocumentID = %q, очікували d1 — provenance втрачено", got.Chunks[0].DocumentID)
+	if children < 2 {
+		t.Fatalf("довгий текст дав %d children, очікували кілька", children)
 	}
 }
 
@@ -218,7 +295,6 @@ func TestChunk_EmptyDocumentIsError(t *testing.T) {
 //
 // TODO(студент): приберіть t.Skip, коли візьметесь за вузол chunk.
 func TestChunk_TableStaysWhole(t *testing.T) {
-	t.Skip("зніміть skip, коли реалізуєте Parent-Child chunking у pipeline.go")
 
 	data, err := os.ReadFile(fixtureDocMD)
 	if err != nil {
@@ -352,8 +428,10 @@ func TestGraph_EarlyWin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if !strings.Contains(res.Final, "Отримано 1 чанків") {
-		t.Errorf("фінальна відповідь = %q; очікували рядок вузла report", res.Final)
+	for _, want := range []string{"Parents:", "Children:", "Tables: 3/3 preserved"} {
+		if !strings.Contains(res.Final, want) {
+			t.Errorf("у звіті немає %q:\n%s", want, res.Final)
+		}
 	}
 	// 7 вузлів після Start — 7 подій: жоден вузол не випав із ланцюжка.
 	if got := len(res.Events); got != 7 {
@@ -375,5 +453,125 @@ func TestChunkJSONContract(t *testing.T) {
 		if !strings.Contains(string(raw), key) {
 			t.Errorf("JSON чанка без поля %s: %s", key, raw)
 		}
+	}
+}
+
+// --- Вузли extract_entities та index_* ---------------------------------------
+
+// fixtureBatch проганяє фікстуру через chunk — спільна основа для тестів нижче.
+func fixtureBatch(t *testing.T) Batch {
+	t.Helper()
+	data, err := os.ReadFile(fixtureDocMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := chunk(newNodeCtx(), newDocument("ledgerworks_soc2", fixtureDocMD, string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// TestExtractEntities перевіряє, що сутності беруться з таблиць і несуть provenance.
+func TestExtractEntities(t *testing.T) {
+	t.Parallel()
+	got, err := extractEntities(newNodeCtx(), fixtureBatch(t))
+	if err != nil {
+		t.Fatalf("extractEntities: %v", err)
+	}
+	if len(got.Entities) == 0 {
+		t.Fatal("жодної сутності — таблиці не розібрано")
+	}
+
+	byType := map[string]int{}
+	for _, e := range got.Entities {
+		byType[e.Type]++
+		if e.SourceChunkID == "" {
+			t.Errorf("сутність %s без SourceChunkID — provenance втрачено", e.ID)
+		}
+		if !strings.HasPrefix(e.ID, e.Type+":") {
+			t.Errorf("ID %q не починається з типу %q", e.ID, e.Type)
+		}
+	}
+	for _, want := range []string{"vendor", "finding", "merchant"} {
+		if byType[want] == 0 {
+			t.Errorf("немає жодної сутності типу %q; є: %v", want, byType)
+		}
+	}
+}
+
+// TestEntityIDIsStable — та сама назва з різним регістром дає той самий ID.
+//
+// Без цього «Acme Bank JSC» і «acme bank jsc» стали б двома вузлами графа, і
+// multi-hop запит ДЗ 6 знайшов би половину зв'язків.
+func TestEntityIDIsStable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{
+		{"Acme Bank JSC", "vendor:acme-bank-jsc"},
+		{"acme bank jsc", "vendor:acme-bank-jsc"},
+		{"  Acme   Bank  JSC ", "vendor:acme-bank-jsc"},
+	} {
+		if got := entityID("vendor", tc.in); got != tc.want {
+			t.Errorf("entityID(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestIndexVectorSkipsParents — у пошук ідуть лише children.
+func TestIndexVectorSkipsParents(t *testing.T) {
+	t.Parallel()
+	idx := vecindex.New()
+	b, err := newIndexVector(idx)(newNodeCtx(), fixtureBatch(t))
+	if err != nil {
+		t.Fatalf("index_vector: %v", err)
+	}
+	var children int
+	for _, c := range b.Chunks {
+		if c.ParentID != "" {
+			children++
+		}
+	}
+	if idx.Len() != children {
+		t.Fatalf("в індексі %d записів, children %d — parents потрапили в пошук", idx.Len(), children)
+	}
+	if b.VectorsAdded != children {
+		t.Errorf("VectorsAdded = %d, очікували %d", b.VectorsAdded, children)
+	}
+}
+
+// TestIndexGraphMergesDuplicates — повтор сутності зливає provenance,
+// а не створює другий вузол.
+func TestIndexGraphMergesDuplicates(t *testing.T) {
+	t.Parallel()
+	b := fixtureBatch(t)
+	b, err := extractEntities(newNodeCtx(), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := kgraph.New()
+	b, err = newIndexGraph(g)(newNodeCtx(), b)
+	if err != nil {
+		t.Fatalf("index_graph: %v", err)
+	}
+
+	unique := map[string]bool{}
+	for _, e := range b.Entities {
+		unique[e.ID] = true
+	}
+	nodes, edges := g.Stats()
+	if nodes != len(unique) {
+		t.Fatalf("вузлів %d, унікальних сутностей %d — дублікати не злилися", nodes, len(unique))
+	}
+	if b.NodesAdded != len(unique) {
+		t.Errorf("NodesAdded = %d, очікували %d (рахуємо обʼєкти, не згадки)", b.NodesAdded, len(unique))
+	}
+	if edges == 0 {
+		t.Error("жодного ребра — звʼязки з рядків таблиці не побудовано")
+	}
+
+	// Vendor → Finding: саме цей перехід потрібен multi-hop запиту ДЗ 6.
+	acme := entityID("vendor", "Acme Bank JSC")
+	if findings := g.Neighbors(acme, "has_finding"); len(findings) == 0 {
+		t.Errorf("у %s немає сусідів has_finding — граф не зв'язує рядок таблиці", acme)
 	}
 }
