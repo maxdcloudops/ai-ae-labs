@@ -38,6 +38,16 @@ regexes = [
     '''OpenAPI specs, protobuf/gRPC definitions''',
     # Conventional placeholder forms, which are documentation by definition.
     '''(?i)(api[_-]?key|token|secret)\s*[:=]\s*(your[_-]|example|placeholder|xxx|\.\.\.|<)''',
+    # ДЗ 9: ключі фактів довготривалої памʼяті у тестах labs9 мають форму
+    # `Key: "integration.A-114"`, і саме слово Key поряд із рядком у лапках
+    # підпалює entropy-евристику generic-api-key. Це не обліковий дані, а
+    # домен задачі: чотири ключі, перелічені в умові (`integration.<ID>`,
+    # `recommended_path.<ID>`, `contact_channel.<ID>`, `do_not_suggest.<ID>`).
+    #
+    # Виняток оголошено за ФОРМОЮ ЗНАЧЕННЯ, а не за шляхом до файлу. Якби він
+    # був за шляхом, справжній ключ, покладений у ті самі тести, пройшов би
+    # повз сканер. Жоден реальний токен не має вигляду `integration.A-114`.
+    '''^(integration|recommended_path|contact_channel|do_not_suggest)\.[A-Z]+-\d+$''',
 ]
 
 # --- Успадковані знахідки в історії ------------------------------------------
