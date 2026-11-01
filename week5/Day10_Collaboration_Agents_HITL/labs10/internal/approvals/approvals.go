@@ -232,6 +232,18 @@ func (s *Store) PendingList(ctx context.Context) ([]Record, error) {
 	return out, nil
 }
 
+// All returns every row of the ledger, newest request first. It is the audit
+// view: pending, decided, timed out and consumed rows together, because an
+// auditor asks "what was asked and what happened", not "what is still open".
+func (s *Store) All(ctx context.Context) ([]Record, error) {
+	var out []Record
+	err := s.db.WithContext(ctx).Order("requested_at desc").Find(&out).Error
+	if err != nil {
+		return nil, fmt.Errorf("approvals: all: %w", err)
+	}
+	return out, nil
+}
+
 // Expire turns every overdue pending request into TimedOut and returns them.
 // The caller resumes each paused workflow with a denial, so the run ends with a
 // named reason instead of hanging.
