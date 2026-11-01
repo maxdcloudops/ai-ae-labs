@@ -1,0 +1,11 @@
+[
+  {
+    "seq": 1,
+    "at": "2026-11-01T13:41:34.527754-05:00",
+    "invocation": "e-7560547e-b804-4345-a0f4-05487badb26e",
+    "author": "memory_agent",
+    "kind": "state_delta",
+    "key": "user:fact.integration.A-114",
+    "detail": "legacy [user, user-turn]"
+  }
+]

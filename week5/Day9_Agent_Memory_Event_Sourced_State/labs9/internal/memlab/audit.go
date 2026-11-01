@@ -48,7 +48,7 @@ func Audit(events []*session.Event) []AuditRow {
 			add(e, "state_delta", k, summarize(e.Actions.StateDelta[k]))
 		}
 		if e.Actions.Compaction != nil {
-			add(e, "compaction", "", fmt.Sprintf("%d подій замінено підсумком", len(e.Actions.Compaction.ExcludedEvents)))
+			add(e, "compaction", "", compactionDetail(events, e.Actions.Compaction))
 		}
 		if e.LLMResponse.Content == nil {
 			continue
@@ -63,6 +63,48 @@ func Audit(events []*session.Event) []AuditRow {
 		}
 	}
 	return rows
+}
+
+// compactionDetail says how many events a summary stands in for.
+//
+// It counts the covered range, NOT len(ExcludedEvents). That field records the
+// holes — events inside the range the summary does not cover — and ADK
+// documents it as normally empty for a single-agent conversation (see
+// session.Compaction). Reporting it as "events replaced" prints 0 in exactly
+// the case where compaction did the most work, which is the opposite of what
+// an audit log is for.
+//
+// Coverage is the range minus the exclusions, matched on the same
+// (invocation, timestamp) key ADK uses, because event IDs do not survive every
+// storage backend.
+func compactionDetail(all []*session.Event, c *session.EventCompaction) string {
+	holes := make(map[string]struct{}, len(c.ExcludedEvents))
+	for _, ref := range c.ExcludedEvents {
+		holes[refKey(ref.InvocationID, ref.Timestamp)] = struct{}{}
+	}
+	covered := 0
+	for _, e := range all {
+		if e.Actions.Compaction != nil {
+			continue // a summary event is not part of what it summarizes
+		}
+		if e.Timestamp.Before(c.StartTimestamp) || e.Timestamp.After(c.EndTimestamp) {
+			continue
+		}
+		if _, hole := holes[refKey(e.InvocationID, e.Timestamp)]; hole {
+			continue
+		}
+		covered++
+	}
+	detail := fmt.Sprintf("%d подій замінено підсумком (%s–%s)",
+		covered, c.StartTimestamp.Format("15:04:05"), c.EndTimestamp.Format("15:04:05"))
+	if n := len(c.ExcludedEvents); n > 0 {
+		detail += fmt.Sprintf("; %d не покрито підсумком", n)
+	}
+	return detail
+}
+
+func refKey(invocation string, ts time.Time) string {
+	return invocation + "|" + ts.UTC().Format(time.RFC3339Nano)
 }
 
 func summarize(v any) string {

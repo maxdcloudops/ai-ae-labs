@@ -34,7 +34,10 @@ import (
 	"github.com/dimetron/ai-eng-course/labs/week5/Day9_Agent_Memory_Event_Sourced_State/labs9/internal/memlab"
 )
 
-// user is the support lead whose memory the lab builds.
+// user is the support lead whose memory the lab builds. It is the default of
+// the -user flag: durable facts live in "user:" state, so the SAME database
+// holds a separate memory per user — which is what the -user contrast in п.1
+// demonstrates.
 const user = "iryna"
 
 // resolveModel is a variable so a test can swap the network for a scripted model.
@@ -67,12 +70,18 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	dbPath := fs.String("db", memlab.DefaultPath, "SQLite-файл сесій і пам'яті")
 	threshold := fs.Int("threshold", 0, "поріг токенів для компакції (tail retention); 0 — вимкнено")
 	offline := fs.Bool("offline", false, "не шукати провайдера, використати правилову модель")
+	uid := fs.String("user", user, "користувач, якому належить пам'ять (той самий файл БД, інша пам'ять)")
+	// The poison command pins the attack to its own session; this flag puts the
+	// same note behind fetch_partner_doc in ANY session, which is what the
+	// audit fragment of п.4 needs: one journal holding a write, an update and
+	// a refusal.
+	portalNote := fs.Bool("portal-note", false, "підкласти заражену примітку порталу в fetch_partner_doc цієї сесії")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		return errors.New("команда: say <сесія> <текст> | facts <сесія> | poison")
+		return errors.New("команда: say <сесія> <текст> | facts <сесія> | audit <сесія> | poison")
 	}
 	m, note := resolveModel(ctx, out)
 	if *offline {
@@ -85,25 +94,33 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	defer func() { _ = st.Close() }()
-	app := App{Store: st, Policy: memlab.DefaultPolicy(), Meter: &memlab.Meter{}}
+	app := App{Store: st, Policy: memlab.DefaultPolicy(), Meter: &memlab.Meter{}, Prompts: &PromptLog{}}
+	if *portalNote {
+		app.Docs = map[string]string{"A-114": InjectedDoc}
+	}
 
 	switch rest[0] {
 	case "say":
 		if len(rest) < 3 {
 			return errors.New("say <сесія> <текст>")
 		}
-		return say(ctx, out, m, app, *threshold, rest[1], strings.Join(rest[2:], " "))
+		return say(ctx, out, m, app, *threshold, note, *uid, rest[1], strings.Join(rest[2:], " "))
 	case "facts":
 		if len(rest) != 2 {
 			return errors.New("facts <сесія>")
 		}
-		return facts(ctx, out, app, rest[1])
+		return facts(ctx, out, app, *uid, rest[1])
+	case "audit":
+		if len(rest) != 2 {
+			return errors.New("audit <сесія>")
+		}
+		return auditLog(ctx, out, app, *uid, rest[1])
 	case "poison":
 		app.Docs = map[string]string{"A-114": InjectedDoc}
-		if err := say(ctx, out, m, app, *threshold, "poison", "Подивись, що пишуть у порталі про A-114."); err != nil {
+		if err := say(ctx, out, m, app, *threshold, note, *uid, "poison", "Подивись, що пишуть у порталі про A-114."); err != nil {
 			return err
 		}
-		return facts(ctx, out, app, "poison")
+		return facts(ctx, out, app, *uid, "poison")
 	default:
 		return fmt.Errorf("невідома команда %q", rest[0])
 	}
@@ -111,7 +128,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 
 // say runs one turn and prints the model answer plus the state changes the
 // turn left in the event log.
-func say(ctx context.Context, out io.Writer, m model.LLM, app App, threshold int, sid, text string) error {
+func say(ctx context.Context, out io.Writer, m model.LLM, app App, threshold int, note, uid, sid, text string) error {
 	ag, err := newAgent(m, app)
 	if err != nil {
 		return err
@@ -125,7 +142,7 @@ func say(ctx context.Context, out io.Writer, m model.LLM, app App, threshold int
 		return err
 	}
 	fmt.Fprintf(out, "[%s] > %s\n", sid, text)
-	t, err := memlab.Say(ctx, r, user, sid, text)
+	t, err := memlab.Say(ctx, r, uid, sid, text)
 	if err != nil {
 		return err
 	}
@@ -133,19 +150,96 @@ func say(ctx context.Context, out io.Writer, m model.LLM, app App, threshold int
 		fmt.Fprintf(out, "      [ev:%s] %s %s\n", row.Kind, row.Key, row.Detail)
 	}
 	fmt.Fprintf(out, "[%s] < %s\n", sid, t.Text)
+	if t.CompactionErr != nil {
+		fmt.Fprintf(out, "      компакція не вдалася: %v\n", t.CompactionErr)
+	}
+	tokens(out, app, note)
 	return nil
 }
 
+// offlineModel reports whether the numbers came from the rules model rather
+// than a provider. memlab.Offline fills UsageMetadata with synthetic,
+// size-proportional counts (output is the constant 12) precisely so the table
+// has numbers without a key — which makes labelling them mandatory.
+func offlineModel(note string) bool { return strings.HasPrefix(note, "offline-rules") }
+
+// source names who produced a token count: the provider's own model string
+// when there is one, otherwise the resolved model note.
+func source(note, modelVersion string) string {
+	if strings.TrimSpace(modelVersion) != "" {
+		return modelVersion
+	}
+	return note
+}
+
+// tokens prints the per-call component split of п.5.
+//
+// The two sources are kept in separate columns on purpose. Our estimate is a
+// ruler we control and can apply to a part of the prompt; UsageMetadata is the
+// only number the provider will bill. Adding them, or presenting an estimate as
+// a measurement, is the mistake the column heading exists to prevent.
+func tokens(out io.Writer, app App, note string) {
+	if app.Prompts == nil {
+		return
+	}
+	breakdowns := app.Prompts.Calls()
+	if len(breakdowns) == 0 {
+		return
+	}
+	calls := app.Meter.Calls()
+	for i, b := range breakdowns {
+		fmt.Fprintf(out, "      виклик %d: інструкція %d + факти %d + преамбула memory-tools %d + історія %d = %d токенів (наша оцінка)\n",
+			i+1, b.Instruction, b.Facts, b.Other, b.History, b.Total())
+		if i >= len(calls) || !calls[i].ReportedUsage {
+			fmt.Fprintf(out, "                 UsageMetadata не повернуто — порівнювати з оцінкою нема з чим\n")
+			continue
+		}
+		fmt.Fprintf(out, "                 UsageMetadata (%s): prompt %d, output %d, total %d\n",
+			source(note, calls[i].Model), calls[i].PromptTokens, calls[i].OutputTokens, calls[i].TotalTokens)
+		if offlineModel(note) {
+			fmt.Fprintf(out, "                 ↑ синтетика offline-моделі (output завжди 12), а НЕ вимір провайдера\n")
+		}
+	}
+}
+
 // facts prints the durable user: facts visible from a session.
-func facts(ctx context.Context, out io.Writer, app App, sid string) error {
-	got, err := app.Store.Sessions.Get(ctx, &session.GetRequest{AppName: AppName, UserID: user, SessionID: sid})
+func facts(ctx context.Context, out io.Writer, app App, uid, sid string) error {
+	got, err := app.Store.Sessions.Get(ctx, &session.GetRequest{AppName: AppName, UserID: uid, SessionID: sid})
 	if err != nil {
 		return fmt.Errorf("facts: %w", err)
 	}
 	fs := memlab.FactsFromState(got.Session.State(), app.Policy)
-	fmt.Fprintf(out, "      факти user: (%d)\n", len(fs))
+	fmt.Fprintf(out, "      факти user: %s (%d)\n", uid, len(fs))
 	for _, f := range fs {
-		fmt.Fprintf(out, "        %s = %s  [%s]\n", f.Key, f.Fact.Value, f.Fact.Tier)
+		stale := ""
+		if f.Stale {
+			stale = "  [ЗАСТАРІЛО]"
+		}
+		fmt.Fprintf(out, "        %s = %s  [%s]%s\n", f.Key, f.Fact.Value, f.Fact.Tier, stale)
+	}
+	return nil
+}
+
+// auditLog writes audit_<user>_<session>.json from the STORED events.
+//
+// Stored, not Turn.Events: tail-retention compaction appends its summary
+// directly to the session, so a compaction row exists only in the persisted
+// stream. The file is derived from events every time — there is no second log
+// to drift out of sync with the first.
+func auditLog(ctx context.Context, out io.Writer, app App, uid, sid string) error {
+	events, err := memlab.StoredEvents(ctx, app.Store.Sessions, AppName, uid, sid)
+	if err != nil {
+		return err
+	}
+	rows := memlab.Audit(events)
+	path := fmt.Sprintf("audit_%s_%s.json", uid, sid)
+	if err := memlab.WriteAudit(path, rows); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "      журнал: %s (%d рядків з %d подій)\n", path, len(rows), len(events))
+	for _, r := range rows {
+		fmt.Fprintf(out, "        %2d %s  %-11s %s %s\n",
+			r.Seq, r.At.Format("15:04:05"), r.Kind, r.Key, r.Detail)
 	}
 	return nil
 }

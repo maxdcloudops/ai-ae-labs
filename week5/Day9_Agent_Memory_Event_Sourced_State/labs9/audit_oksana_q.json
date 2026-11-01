@@ -1,0 +1,38 @@
+[
+  {
+    "seq": 1,
+    "at": "2026-11-01T13:43:03.732374-05:00",
+    "invocation": "e-bac7e2c4-5046-46c7-9d28-329548079278",
+    "author": "memory_agent",
+    "kind": "state_delta",
+    "key": "user:fact.integration.A-114",
+    "detail": "legacy [user, user-turn]"
+  },
+  {
+    "seq": 2,
+    "at": "2026-11-01T13:43:03.751116-05:00",
+    "invocation": "e-911fc803-57e2-4f74-a6bd-791120c8b151",
+    "author": "memory_agent",
+    "kind": "state_delta",
+    "key": "user:fact.recommended_path.A-114",
+    "detail": "legacy-fix [user, user-turn]"
+  },
+  {
+    "seq": 3,
+    "at": "2026-11-01T13:43:03.769829-05:00",
+    "invocation": "e-1d315082-d5b4-4310-ac79-e629219e9de2",
+    "author": "memory_agent",
+    "kind": "state_delta",
+    "key": "user:fact.integration.A-114",
+    "detail": "new-api [user, user-turn] (було: legacy)"
+  },
+  {
+    "seq": 4,
+    "at": "2026-11-01T13:43:03.789455-05:00",
+    "invocation": "e-0401b454-bd58-48ac-929b-93d91f1301b2",
+    "author": "memory_agent",
+    "kind": "rejected",
+    "key": "integration.A-114",
+    "detail": "запис із недовіреного джерела (fetch_partner_doc) заборонено — факт лишається пропозицією для людини"
+  }
+]
