@@ -3,6 +3,7 @@ module github.com/dimetron/ai-eng-course/labs
 go 1.27.1
 
 require (
+	github.com/a2aproject/a2a-go/v2 v2.5.0
 	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20261001154531-3cf4290db2fe
 	github.com/dgraph-io/dgo/v250 v250.0.0
 	github.com/dimetron/pi-go v0.2.7
@@ -11,10 +12,13 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	go.temporal.io/sdk v1.49.0
+	go.temporal.io/sdk/contrib/googleadk v0.3.0
 	golang.org/x/sync v0.23.0
 	google.golang.org/adk/v2 v2.5.0
 	google.golang.org/genai v1.71.0
 	google.golang.org/grpc v1.84.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.31.2
 )
 
@@ -25,7 +29,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.36.0 // indirect
 	github.com/a2aproject/a2a-go v0.3.15 // indirect
-	github.com/a2aproject/a2a-go/v2 v2.5.0 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.71.0 // indirect
 	github.com/awalterschulze/gographviz v2.0.3+incompatible // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -91,8 +94,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.temporal.io/api v1.63.5 // indirect
-	go.temporal.io/sdk v1.49.0 // indirect
-	go.temporal.io/sdk/contrib/googleadk v0.3.0 // indirect
 	go.temporal.io/sdk/contrib/workflowstreams v0.1.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
@@ -107,7 +108,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
