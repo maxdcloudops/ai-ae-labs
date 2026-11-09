@@ -1,0 +1,258 @@
+<title>Конспект AI Agents Engineering</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#17191d;--ink2:#474c55;--mut:#757a84;
+        --line:#dcdfe4;--acc:#2f6f94;--accbg:#e3eef5;--code:#eef1f4;
+        --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+        --mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+  @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+        --bg:#14161a;--card:#1c1f25;--ink:#e9ebee;--ink2:#b2b7bf;--mut:#878c95;
+        --line:#2a2e35;--acc:#72b5d8;--accbg:#15303d;--code:#22262d}}
+  :root[data-theme=dark]{--bg:#14161a;--card:#1c1f25;--ink:#e9ebee;--ink2:#b2b7bf;
+        --mut:#878c95;--line:#2a2e35;--acc:#72b5d8;--accbg:#15303d;--code:#22262d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.6 var(--sans);
+       padding:0 18px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto}
+  header{padding:32px 0 16px;border-bottom:2px solid var(--ink)}
+  h1{margin:0;font-size:clamp(24px,4.6vw,34px);letter-spacing:-.02em}
+  .intro{margin-top:12px;color:var(--ink2);max-width:72ch}
+  .intro p{margin:8px 0}
+  nav{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0;
+      border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px}
+  .tab{font:12.5px var(--mono);padding:6px 11px;border-radius:6px;cursor:pointer;
+       border:1px solid var(--line);background:var(--card);color:var(--ink2)}
+  .tab:hover{border-color:var(--acc);color:var(--ink)}
+  .tab.on{background:var(--accbg);color:var(--acc);border-color:var(--acc);font-weight:600}
+  .panel{display:none;padding-top:26px}
+  .panel.on{display:block}
+  h2{font-size:clamp(19px,3vw,24px);margin:0 0 6px;letter-spacing:-.01em}
+  h3{font-size:16.5px;margin:26px 0 6px}
+  p{margin:10px 0;color:var(--ink2);max-width:74ch}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink2);max-width:74ch}
+  li{margin:5px 0}
+  li::marker{color:var(--mut)}
+  a{color:var(--acc);text-decoration:none;border-bottom:1px solid transparent}
+  a:hover{border-bottom-color:var(--acc)}
+  code{font:12.6px var(--mono);background:var(--code);padding:1px 5px;border-radius:4px}
+  pre{font:12.6px/1.55 var(--mono);background:var(--card);border:1px solid var(--line);
+      border-radius:7px;padding:13px 15px;overflow-x:auto;color:var(--ink2)}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:7px;
+          background:var(--card);margin:16px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+  th,td{padding:8px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--code);font:11px var(--mono);letter-spacing:.05em;
+           text-transform:uppercase;color:var(--ink2);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);
+         color:var(--mut);font-size:13px}
+  @media(max-width:560px){nav{gap:4px}.tab{font-size:11.5px;padding:5px 8px}}
+</style>
+<div class="wrap">
+<header>
+  <h1>AI Agents Engineering — конспект курса</h1>
+  <div class="intro"><p><strong>Собрано 08.11.2026.</strong> Источники: платформа Prometheus (структура курса и блоки «Рекомендовані джерела» по всем 12 вебинарам), репозиторий курса <code>dimetron/ai-ae-labs</code> (условия ДЗ, лекция дня 5, гайды, 18 паттернов, демо) и собственные 12 сданных работ с измеренными результатами.</p>
+<p><strong>Автор курса:</strong> Дмитро Рашко — Software Architect, maintainer <strong>KAgent</strong> (CNCF sandbox), contributor <strong>AgentGateway</strong>. Это объясняет, почему в курсе есть демо с kagent и бонус-трек с agentgateway: оба проекта его.</p>
+<p><strong>Чего здесь нет:</strong> записи вебинаров и слайды (лежат на платформе, локально была одна презентация из двенадцати). Всё остальное — конспект по материалам и по тому, что реально получилось в лабах.</p>
+<hr></div>
+</header>
+<nav>
+    <button class="tab on" data-t="статус">Статус</button>
+    <button class="tab" data-t="стек">Стек</button>
+    <button class="tab" data-t="неделя-1">Неделя 1</button>
+    <button class="tab" data-t="неделя-2">Неделя 2</button>
+    <button class="tab" data-t="неделя-3">Неделя 3</button>
+    <button class="tab" data-t="неделя-4">Неделя 4</button>
+    <button class="tab" data-t="неделя-5">Неделя 5</button>
+    <button class="tab" data-t="неделя-6">Неделя 6</button>
+    <button class="tab" data-t="паттерны">Паттерны</button>
+    <button class="tab" data-t="практики">Практики ★</button>
+    <button class="tab" data-t="код">Код</button>
+    <button class="tab" data-t="источники">Источники</button>
+</nav>
+  <section class="panel on" id="статус">
+    <h2>0. Статус и сроки (на 08.11.2026)</h2>
+<p>Оценка — среднее по 12 вебинарам, балл каждого делится на его максимум. Текущая: <strong>43%</strong>, для сертификата нужно <strong>60%</strong>.</p>
+<div class="scroll"><table><thead><tr><th>ДЗ</th><th>Балл</th><th>Статус отправки на платформе</th></tr></thead><tbody><tr><td>1</td><td>100/100</td><td>засчитано</td></tr><tr><td>2</td><td>100/100</td><td>засчитано</td></tr><tr><td>3</td><td>55/145</td><td>засчитано</td></tr><tr><td>4</td><td>60/145</td><td>засчитано</td></tr><tr><td>5</td><td>80/100</td><td>засчитано</td></tr><tr><td>6</td><td>80/100</td><td>засчитано</td></tr><tr><td>7</td><td>80/100</td><td>засчитано</td></tr><tr><td>8</td><td>0/100</td><td><strong>НЕЗАВЕРШЕНО, закрыто</strong> (срок 2.11)</td></tr><tr><td>9</td><td>0/100</td><td><strong>НЕЗАВЕРШЕНО, закрыто</strong> (срок 5.11)</td></tr><tr><td>10</td><td>—</td><td>ЗАВЕРШЕНО, ждёт проверки (срок 9.11)</td></tr><tr><td>11</td><td>—</td><td>ЗАВЕРШЕНО, ждёт проверки (срок 12.11)</td></tr><tr><td>12</td><td>—</td><td>ЗАВЕРШЕНО, ждёт проверки (срок 16.11)</td></tr></tbody></table></div>
+<p>Если 10, 11 и 12 оценят по ≥67 — выходит ровно 60%. По 80 — 63%. ДЗ 8 и 9 сделаны и лежат в репозитории, но форма на платформе не заполнена.</p>
+<hr>
+  </section>
+  <section class="panel" id="стек">
+    <h2>1. Стек и терминология</h2>
+<div class="scroll"><table><thead><tr><th>Что</th><th>Версия на курсе</th><th>Заметка</th></tr></thead><tbody><tr><td>Google ADK Go</td><td>v2.0.0 GA 30.06.2026; в репо <code>v2.5.0</code>, условия ДЗ 9–12 называют <code>v2.6.0</code></td><td>расхождение реальное, собирать на том, что в <code>go.mod</code></td></tr><tr><td>Go</td><td>1.27.1 (ADK требует ≥1.26.6)</td><td>два разных числа, не выравнивать</td></tr><tr><td>MCP</td><td>спецификация 2025-11-25</td><td>+ расширение Tasks (2026-07-28)</td></tr><tr><td>A2A</td><td>v1.0.1 (26.05.2026)</td><td>Go-библиотека <code>adk-go</code> имеет свою версию</td></tr></tbody></table></div>
+<p>Три стиля построения агентной системы, и выбор между ними — отдельный навык:</p>
+<ol><li><strong>Статический граф</strong> — топология известна заранее. Узлы, рёбра, маршруты.</li><li><strong>Динамический граф</strong> (<code>NewDynamicNode</code>) — число шагов выясняется в рантайме.</li><li><strong>Collaboration agents</strong> — координатор + подагенты как инструменты.</li></ol>
+<p>Ось выбора: <strong>кто решает, каким будет следующий шаг</strong>. Код — статический граф. Код в рантайме — динамический. Модель — coordinator.</p>
+<hr>
+  </section>
+  <section class="panel" id="неделя-1">
+    <h2>2. Неделя 1. Фундамент: API, типизация, ландшафт</h2>
+<h3>Вебинар 1 — LLMs as a Runtime</h3>
+<p>Токеновая экономика (FinOps), системные промпты, контекстные окна, модельный ряд. Практика: Cross-Model Benchmark Harness с калькулятором стоимости.</p>
+<p><strong>Что важно на практике:</strong></p>
+<ul><li>Классификация ошибок: transient (429, таймаут) против permanent (403, неверный аргумент). Ретраить нужно только первое.</li><li><strong>Retry amplification</strong>: два уровня ретраев по 4 попытки дают 16 запросов к падающему API. Держать один уровень, ретраи SDK выключать явно.</li><li>Граница домена принадлежит коду, а не промпту. Отказ — это <em>declared step</em>, который попадает в лог, а не отсутствие ответа.</li></ul>
+<h3>Вебинар 2 — Stop Parsing Hope</h3>
+<p>Структурированный вывод через Go-структуры и JSON Schema, function calling. Практика: Strict Schema Enforcer.</p>
+<p><strong>Что важно на практике:</strong></p>
+<ul><li>У Go нет опциональных полей: выведенная из структуры схема помечает всё как <code>required</code>, и вызовы без необязательного поля молча отклоняются до обработчика. Лечится тегом <code>json:&quot;...,omitempty&quot;</code>.</li><li>Правило <strong>«ремонт против отказа»</strong>: привести <code>Prod</code> → <code>prod</code> безопасно; угадать <code>prod-eu</code> из <code>prod</code> — нет. Второе это догадка, а не нормализация.</li><li>Ошибка инструмента обязана называть <strong>конкретное поле и значение</strong>, иначе следующая попытка модели будет такой же.</li></ul>
+<hr>
+  </section>
+  <section class="panel" id="неделя-2">
+    <h2>3. Неделя 2. ADK 2.0: граф и деплой</h2>
+<h3>Вебинар 3 — Agent Anatomy: граф как данные</h3>
+<p>Первый агент ADK как граф с типизированными узлами-инструментами.</p>
+<p><strong>Ключевое:</strong> <code>StateDelta</code> и event log. Запись в состояние должна идти через <code>ctx.State().Set</code> — только тогда она становится <code>StateDelta</code> на событии инструмента, из которого потом выводится аудит. <code>ctx.Session().State().Set</code> не оставляет следа.</p>
+<h3>Вебинар 4 — Ship the Agent</h3>
+<p>Один статический бинарник, HTTP-сервис со стримингом, готовый к Kubernetes. <em>(Единственная презентация, которая была локально: 21 слайд.)</em></p>
+<p><strong>Ключевое со слайдов:</strong></p>
+<ul><li>«Агент, которого нельзя вызвать по сети, не существует для других программ».</li><li>Health-check должен быть дешёвым и <strong>не</strong> вызывать LLM: он проверяет доступность по стабильному адресу, а не качество ответа.</li><li><code>/readyz</code> отдаёт 200 в штатном режиме и 503 во время drain.</li><li>Корректное завершение по <code>SIGTERM</code>: drain, ограниченное ожидание, честный код выхода. PID 1 и exec-форма ENTRYPOINT — иначе сигнал не доходит.</li><li><code>FROM scratch</code> + статическая сборка: образ порядка 15 МБ. <strong>Измерять, а не угадывать</strong> размер.</li></ul>
+<hr>
+  </section>
+  <section class="panel" id="неделя-3">
+    <h2>4. Неделя 3. Agentic GraphRAG</h2>
+<h3>Вебинар 5 — От PDF к графу знаний</h3>
+<p>Lossless parsing многотабличных PDF, ontology-driven chunking, entity resolution.</p>
+<p><strong>Что важно на практике:</strong></p>
+<ul><li><strong>Parent-Child chunking</strong>: ищем по мелкому чанку, в модель отдаём родительский раздел. Поиск любит мелкое, ответ любит крупное.</li><li><strong>Таблицы целиком или никак.</strong> Таблица лимитов, разрезанная по строкам, даёт ответ, который звучит уверенно и неверен. В отчёт ingestion выводить <code>Tables: K/K preserved</code>.</li><li>Ловушка: заголовок блока из парсера уже содержит номер раздела, и приклеивание номера даёт «1 1 Scope».</li></ul>
+<h3>Вебинар 6 — Agentic GraphRAG</h3>
+<p>Hybrid retrieval, multi-hop planning, re-ranking, semantic cache.</p>
+<p><strong>Что важно на практике:</strong></p>
+<ul><li><strong>Разнообразие важнее чистого скора.</strong> Топ по релевантности целиком состоит из одной ветви, и второй факт теряется ровно тогда, когда нужен multi-hop. Нужна квота в топе на каждую ветвь.</li><li>Сравнение по подстроке ловит ложные совпадения: <code>&quot;t-2&quot;</code> нашлось внутри <code>&quot;ct-2025-014&quot;</code> и увело ответ. Сравнивать по токенам.</li><li><strong>Семантический кеш опаснее, чем кажется.</strong> У лексического эмбеддера «инцидент T-1» и «инцидент T-2» похожи сильнее, чем перефраз того же вопроса. То есть кеш промахивается там, где должен попадать, и попадает там, где нельзя. Лечится лексической страховкой: совпадение вектора <strong>и</strong> идентификаторов.</li><li>Порог похожести из чужого конспекта не переносится — калибровать на своих данных.</li></ul>
+<hr>
+  </section>
+  <section class="panel" id="неделя-4">
+    <h2>5. Неделя 4. Циклы и отказы</h2>
+<h3>Вебинар 7 — Inside the ReAct Loop</h3>
+<p>Thought → Action → Observation руками и в графе.</p>
+<p><strong>ReAct-цикл — это двадцать строк <code>for</code>.</strong> Три решения, которые выглядят мелочами и ими не являются:</p>
+<ul><li>Лимит итераций проверяется <strong>перед</strong> вызовом модели. После — последняя итерация успевает заплатить за шаг, который мы уже решили не делать.</li><li>Порядок наблюдений равен порядку вызовов, и каждое несёт <code>CallID</code> своего вызова: модель может попросить три инструмента одним шагом.</li><li>Без <code>history.Append</code> следующий шаг не видит результата и повторяет тот же вызов — самый частый способ получить цикл, который никогда не сходится.</li><li>Trace возвращается <strong>вместе с ошибкой</strong>: в три ночи вопрос звучит «где застряло», и отвечает на него след, а не текст ошибки.</li><li>Ноль в лимите итераций не означает «без ограничений»: это не настройка для цикла, который вызывает платную модель.</li></ul>
+<h3>Вебинар 8 — When Tools Fail + lethal trifecta</h3>
+<p>Транзиентные сбои против логических ошибок, самокоррекция, durable execution.</p>
+<p><strong>Классификация — только через <code>errors.Is</code>/<code>errors.As</code>, никогда по тексту:</strong></p>
+<pre>context.Canceled        → Fatal          (отмена пришла сверху)
+*SemanticError          → SurfaceToModel (ДО транзиентной!)
+ErrTransient            → RetryTransient
+default                 → Fatal          (неизвестная = фатальная)</pre>
+<p>Семантическая проверяется <strong>до</strong> транзиентной: одна ошибка может удовлетворять обеим (обёртки складываются), и если выиграет транзиентная — harness начнёт повторять неверный аргумент столько раз, сколько разрешит движок. <code>DeadlineExceeded</code> транзиентный, <code>Canceled</code> фатальный: выглядят похоже, означают противоположное.</p>
+<p><strong>Durable execution (Temporal).</strong> Повторы отдаются движку: <code>RetryPolicy{NonRetryableErrorTypes: [&quot;SemanticError&quot;]}</code> — классификация становится контрактом сервера, а не <code>if</code> в нашем цикле.</p>
+<p>Измерено на практике: <code>kill -9</code> посреди вызова инструмента, воркер поднимается, ход доходит сам. Счётчик вызовов модели: <strong>3 → 2 (перед kill) → 3 (после)</strong> — то есть после восстановления добавился ровно один вызов, остальное Temporal воспроизвёл из истории событий. Был бы перезапуск — было бы 5.</p>
+<p><strong>Две ловушки:</strong></p>
+<ul><li><code>ActivityAsTool</code> отдаёт ошибку Activity прямо модели как ошибку инструмента, и семантический сбой перестаёт быть Observation. Нужна точка преобразования.</li><li>Сентинелы не переживают сериализацию: после Activity остаётся только тип-строка, <code>errors.Is</code> по сентинелу не срабатывает.</li></ul>
+<p><strong>Lethal trifecta</strong> (Simon Willison) — сочетание трёх свойств, при котором агент становится эксплуатируемым: доступ к приватным данным + обработка недоверенного контента + возможность внешней коммуникации. Убрать любое из трёх.</p>
+<hr>
+  </section>
+  <section class="panel" id="неделя-5">
+    <h2>6. Неделя 5. Память и команды</h2>
+<h3>Вебинар 9 — Память, event-sourced состояние</h3>
+<p><strong>Запись в долговременную память — привилегированная операция.</strong> OWASP ведёт это как отдельный класс угроз (<strong>ASI06, Memory &amp; Context Poisoning</strong>); работа <strong>MINJA</strong> (arXiv:2503.03704) показала отравление банка памяти обычными запросами.</p>
+<p>Механика:</p>
+<ul><li><code>TaintAfterTool(&quot;...&quot;)</code> помечает вызов «забруднено» после любого инструмента, вернувшего внешний текст. Пока метка стоит, запись отклоняется.</li><li><strong>Кто пишет — решает программа.</strong> У контракта записи нет поля «источник»: это ровно то поле, которое заполнила бы инъекция.</li><li>Отказ — это Observation <code>{&quot;status&quot;:&quot;rejected&quot;,&quot;reason&quot;:…}</code>, а не ошибка Go. Ошибка оборвала бы ход, и модель не узнала бы причину.</li><li>Журнал выводится из событий, второго источника правды нет.</li><li>TTL на факте: факт про инфраструктуру обязан истекать.</li></ul>
+<p><strong>Деталь, которая стоит больше механики:</strong> в лабе модель <em>сама</em> написала в тексте ответа «это чужой текст, подтвердите» — и всё равно записала факт. Инструкция сработала, гарантия — нет. Текст ответа и то, что попало в память, две разные вещи.</p>
+<p><strong>Цена памяти (измерено):</strong> один факт в промпте — 54 токена, преамбула memory-инструментов ADK — <strong>115 токенов на каждый вызов, даже когда память пуста</strong>. Вдвое дороже самого факта.</p>
+<h3>Вебинар 10 — Agents as Teams, human approval</h3>
+<p><strong>Главный вывод: решение по протоколу — это строка журнала, а не ответ в сессии.</strong> Ответ, который разбудил приостановленный прогон, — только сигнал, что кто-то где-то ответил. Решение пишет отдельная команда с именем человека, один раз, условным <code>UPDATE ... WHERE status=&#x27;pending&#x27;</code>. Поэтому подделанный ответ в сессии не может ничего одобрить.</p>
+<ul><li>В вопросе человеку — <strong>факты</strong>: действие, получатели, хеш артефакта, диф, статус источников, пробелы. Не проза координатора.</li><li>Три разные записи на одно следствие: <code>denied</code> / <code>timed_out</code> (автор <code>system:timeout</code>) / <code>invalid</code>. Журнал, где всё это «не одобрено», не отвечает на вопрос «нас отказали или мы проспали дедлайн».</li><li>Одобрение <strong>тратится отправкой</strong>: повторный прогон не отправит дважды.</li><li><code>RerunOnResume: &amp;true</code> обязателен. С <code>nil</code>/<code>&amp;false</code> ответ человека уходит <strong>следующему</strong> узлу, и затвор не доходит до чтения журнала.</li><li>HITL <strong>нельзя</strong> внутри параллельных ветвей: ADK вернёт <code>ErrParallelHITLUnsupported</code>.</li><li>Чего затвор не умеет: дедлайн держит не он, а чья-то развёртка. Нет cron — нет отказа, вопрос висит. Лечится durable-слоем.</li></ul>
+<p><strong>Два противоположных текста, которые стоит читать вместе:</strong> Anthropic «How we built our multi-agent research system» (за) и Cognition «Don&#x27;t Build Multi-Agents» (против). Плюс arXiv:2503.13657 «Why Do Multi-Agent LLM Systems Fail?».</p>
+<hr>
+  </section>
+  <section class="panel" id="неделя-6">
+    <h2>7. Неделя 6. Динамика и самоулучшение</h2>
+<h3>Вебинар 11 — Dynamic Subagents, Multi-Critic</h3>
+<ul><li><strong>Объективная проверка первой, LLM-критики после.</strong> Манифест/код, который не парсится, невозможно судить по стилю, а платить трём моделям за разбор безопасности файла с синтаксической ошибкой — самый дешёвый способ сжечь бюджет.</li><li>Кворум <strong>одностайный</strong>, а не голосование: фокусы критиков не пересекаются, поэтому чистый вердикт о привилегиях ничего не говорит об отсутствующих лимитах памяти, и два «да» не перебивают одно «нет».</li><li>Невалидный вердикт <strong>отсекается</strong>, а не «как-то интерпретируется»: неизвестная роль, подмена роли, <code>passed=false</code> без комментариев, <code>passed=true</code> с комментариями. Fail-closed: отклонённый вердикт никогда не даёт принятия, иначе самый дешёвый способ пройти панель — сломать критика.</li><li><strong>Главная цифра отчёта — false accepts</strong>: сколько раз цикл принял кандидата, оказавшегося ложным на holdout.</li></ul>
+<p>Измерено: 3 из 3 ложных принятий — и это результат, а не поломка. Панель поймала всё, за что отвечает, а скрытые правила были вне зоны ответственности всех трёх критиков. <strong>Вывод не про промпт: нужен критик, который владеет этим классом правил.</strong></p>
+<p>Побочное наблюдение: у объекта без пода (k8s Service) критики привилегий, лимитов и секретов проходят тривиально — панель из трёх голосов тихо становится панелью из нуля.</p>
+<h3>Вебинар 12 — Autoresearch: улучшение под бюджет</h3>
+<p>Пять тормозов паттерна (<code>karpathy/autoresearch</code>):</p>
+<ol><li><strong>Ограниченная поверхность изменений.</strong> Тип, а не <code>strings.HasPrefix</code> на месте записи: префиксная проверка пропускает traversal, абсолютный путь, симлинк на месте файла и симлинк в каталоге пути. Проверять и само объявление поверхности.</li><li><strong>Фиксированный бюджет.</strong> Ноль отклоняется: читается как «дефолт», означает «без ограничений». Лимит проверяется <strong>до</strong> вызова модели.</li><li><strong>Одна объективная метрика.</strong> Чистая функция без модели. Отдельный набор решает, отдельный только отчитывается. Кандидат, цитирующий ожидаемые ответы, отклоняется <strong>до</strong> измерения.</li><li><strong>Человеко-читаемый артефакт стратегии</strong> — control point, который человек правит в PR, а не пост-фактум анализ.</li><li><strong>Полный журнал</strong> — и keep, и discard. Журнал только из успехов — это журнал цикла, из которого никто ничего не узнал.</li></ol>
+<p><strong>Два вывода из прогона, которые дороже механики:</strong></p>
+<ul><li>Жадный цикл keep/discard <strong>не перелезает плато, которое требует двух изменений сразу</strong>. Одиночный рычаг метрику не двигает, кандидат откатывается, следующий узкий шаг стартует с того же места.</li><li>Цикл <strong>трижды отбросил</strong> изменение, улучшавшее результат на отложенном наборе: на основном метрика стояла. Подглядывать в отложенный набор правилом нельзя — он перестанет быть отложенным. Информацией, которой движку пользоваться запрещено, имеет право воспользоваться человек.</li></ul>
+<p>Плюс мелочь, которая тихо ломает: <code>0.54 − 0.5</code> в float64 даёт <code>0.040000000000000036</code>, так что «выросла ровно на ε» без допуска решается двоичным округлением — по-разному на разных машинах.</p>
+<p><strong>Чего не хватает до продакшна (все три вне курса):</strong></p>
+<ul><li><strong>Изоляция.</strong> Проверка пути живёт внутри процесса, между проверкой и записью есть окно TOCTOU. Границу должно держать ядро: gVisor, Firecracker microVM, <code>kubernetes-sigs/agent-sandbox</code>, e2b.</li><li><strong>Идентичность.</strong> Журнал отвечает «что произошло», но не «кто имел право». SPIFFE/SPIRE + политика (OPA/Cedar) на каждом делегировании. Не передавать дочернему агенту полный токен родителя — confused deputy.</li><li><strong>Durable execution.</strong> Цикл живёт в памяти процесса; <code>kill -9</code> стирает состояние. Единственный из трёх, который в курсе доказан числами (ДЗ 8).</li></ul>
+<hr>
+  </section>
+  <section class="panel" id="паттерны">
+    <h2>8. Каталог паттернов (demo/3_adk2_patterns, 18 штук)</h2>
+<div class="scroll"><table><thead><tr><th>Код</th><th>Паттерн</th><th>Когда брать</th></tr></thead><tbody><tr><td>a1</td><td>single agent</td><td>один источник, один контекст; дешевле всего</td></tr><tr><td>a2</td><td>ReAct</td><td>нужен цикл рассуждение→действие, шагов заранее не знаем</td></tr><tr><td>b1</td><td>sequential pipeline</td><td>фиксированная цепочка этапов</td></tr><tr><td>b2</td><td>fan-out / gather</td><td>несколько независимых источников, нужен барьер</td></tr><tr><td>b3</td><td>loop</td><td>повтор до условия; всегда с бюджетом</td></tr><tr><td>b4</td><td>conditional route</td><td>ветвление по типу запроса</td></tr><tr><td>b5</td><td>custom logic</td><td>узел-функция без модели</td></tr><tr><td>c1</td><td>coordinator</td><td>модель решает, кому делегировать</td></tr><tr><td>c2</td><td>hierarchical decomposition</td><td>задача дробится на подзадачи рекурсивно</td></tr><tr><td>c3</td><td>swarm</td><td>равные агенты без координатора</td></tr><tr><td>c4</td><td>routed agent</td><td>маршрутизация к специалисту по домену</td></tr><tr><td>d1</td><td>review / critique</td><td>один критик над результатом</td></tr><tr><td>d2</td><td>iterative refinement</td><td>критик + переделка в цикле</td></tr><tr><td>e1</td><td>human in the loop</td><td>пауза на схвалення перед риском</td></tr><tr><td>e2</td><td>tool confirmation gate</td><td>подтверждение конкретного вызова инструмента</td></tr><tr><td><strong>e3</strong></td><td><strong>ambient agent</strong></td><td><strong>запускает событие, а не человек</strong></td></tr><tr><td>x</td><td>function graph</td><td>граф как данные, без агентов</td></tr><tr><td>x</td><td>guards</td><td>предохранители графа</td></tr></tbody></table></div>
+<p><strong>e3 отдельно</strong> — это обёртка развёртывания, а не паттерн оркестрации: внутрь кладётся любой граф A–D. Форма: <code>очередь → пул воркеров → свежая сессия на событие → граф → исход со сводкой, называющей причину каждого сбоя</code>. Свежая сессия обязательна: два события в одной сессии смешиваются в одну историю. Память между событиями — это memory-сервис, а не состояние сессии.</p>
+<p><strong>Предохранители графа, которые ADK ловит на сборке</strong> (<code>errors.Is</code>): <code>ErrUnconditionalCycle</code> (цикл без маршрута), <code>ErrUnsupportedFanIn</code> (две безусловные ветви в не-JoinNode), <code>ErrMultipleDefaultRoutes</code>, <code>ErrNodesNotReachable</code>, <code>ErrDuplicateNodeName</code>, <code>ErrNoStartNode</code>. В рантайме: <code>ErrParallelHITLUnsupported</code>, <code>ErrInvalidRunNodeContext</code>, <code>ErrMultipleOutputs</code>.</p>
+<p><strong>Ловушки, которые не ловит никто:</strong></p>
+<ul><li><code>RerunOnResume</code> трёхзначный: <code>&amp;true</code> перезапускает узел с начала; <code>&amp;false</code> <strong>и <code>nil</code></strong> отдают ответ человека следующему узлу.</li><li>Побочные эффекты до паузы выполняются <strong>дважды</strong>.</li><li><code>JoinNode</code> несёт только выходы ветвей — ничего из того, что было до fan-out. Контекст везти внутри выхода каждой ветви.</li><li>Значения в join — <code>any</code>; приведение типа падает, нужен JSON round-trip.</li><li>Событие не может нести и <code>Output</code>, и возврат узла одновременно.</li><li><code>loopagent.MaxIterations: 0</code> — бесконечный цикл, а не дефолт.</li></ul>
+<hr>
+  </section>
+  <section class="panel" id="практики">
+    <h2>9. Практики multi-agent — то, что применять в своём продукте</h2>
+<p>Это выжимка для агента, который пишет код. Каждый пункт — следствие измеренного, а не мнение.</p>
+<h3>Границы</h3>
+<ol><li><strong>Права — свойство учётных данных, а не промпта.</strong> ClusterRole <code>view</code>, IAM <code>ReadOnlyAccess</code>, read-scope токены. Промпт «не удаляй» не является реализацией требования.</li><li><strong>Модель не вызывает инструменты из рассуждения.</strong> Сбор фактов — отдельный узел, выполняемый до рассуждения, иначе в логе не видно, что прочитано.</li><li><strong>Аргументы инструментов — типизированные поля</strong>, не строки из текста модели. Ремонт против отказа: нормализовать регистр можно, угадывать имя — нет.</li><li><strong>Policy-точка на вызове модели не является границей авторизации</strong>, если код читает источник напрямую. Проверять в обоих местах, и <strong>до</strong> чтения, а не фильтровать результат на выходе.</li></ol>
+<h3>Ошибки и повторы</h3>
+<ol><li>Классификация только через <code>errors.Is</code>/<code>errors.As</code>; порядок проверок — семантическая до транзиентной.</li><li>Один уровень повторов. Ретраи SDK выключать явно.</li><li>Повторы отдавать движку (<code>RetryPolicy</code>), а не писать свой <code>for</code> поверх.</li><li>Побочные эффекты идемпотентны по ключу запроса.</li></ol>
+<h3>Человек в контуре</h3>
+<ol><li>Решение — строка журнала с именем человека, а не ответ в сессии.</li><li>В вопросе — факты, не проза. Три разные записи отказа.</li><li>Молчание = отказ <strong>с названной причиной</strong>; дедлайн держит движок таймеров, а не чей-то cron.</li><li>Одобрение тратится действием.</li></ol>
+<h3>Циклы и бюджеты</h3>
+<ol><li>Лимит проверяется до вызова модели. Ноль — не «без ограничений».</li><li>Объективная проверка раньше LLM-критиков.</li><li>Кворум критиков одностайный; невалидный вердикт отсекается, fail-closed.</li><li>Метрика, которую предъявляют, — <strong>false accepts</strong>, а не «сколько итераций».</li></ol>
+<h3>Память</h3>
+<ol><li>Память добавляется <strong>после</strong> политики записи, а не вместе с ней.</li><li>Кто пишет — решает программа; у контракта нет поля «источник».</li><li>Внешний текст помечается и не может переписать факт.</li><li>TTL на факте обязателен.</li></ol>
+<h3>Наблюдаемость</h3>
+<ol><li>Журнал выводится из событий, второго источника правды нет.</li><li>Запись в состояние — через контекст инструмента, иначе следа нет.</li><li>Счётчики восстанавливать из журнала: если поток событий не является достаточной записью, «event log показывает траекторию» — это фраза, а не свойство.</li></ol>
+<h3>Что всегда говорить честно</h3>
+<ol><li>Если провайдера нет — первая строка вывода обязана это называть, и обязана называть, чего прогон <strong>не</strong> доказывает.</li><li>Оценка токенов и измерение провайдера — разные колонки. Не складывать.</li></ol>
+<hr>
+  </section>
+  <section class="panel" id="код">
+    <h2>10. Код курса и запуск</h2>
+<pre>git clone https://github.com/maxdcloudops/ai-ae-labs &amp;&amp; cd ai-ae-labs
+cp apps/.env-example apps/.env     # ключ опционален: без него работают заглушки
+
+task check        # fmt + vet + build + test
+task build:all    # включая вложенные модули демо
+go test -race ./...</pre>
+<p>Вложенные Go-модули (из корня <code>go build ./...</code> их не видит): <code>demo/1_ai-gateway/mock-llm/</code>, <code>demo/adk-quickstart/</code>.</p>
+<p>Демо, которые стоит посмотреть:</p>
+<div class="scroll"><table><thead><tr><th>Каталог</th><th>Что</th></tr></thead><tbody><tr><td><code>demo/3_adk2_patterns/</code></td><td>18 паттернов, свой Taskfile</td></tr><tr><td><code>demo/4_adk_examples/</code></td><td>примеры по неделям 1–6</td></tr><tr><td><code>demo/5_kagent/</code></td><td>kagent на Kind: скрипт из 10 шагов, проверен за 15 мин 23 с</td></tr><tr><td><code>demo/1_ai-gateway/</code></td><td>agentgateway + Jaeger/Prometheus/Grafana</td></tr><tr><td><code>demo/9_cloudflare-durable-go/</code></td><td>durable execution на Cloudflare</td></tr><tr><td><code>demo/6_adk_telegram_bot/</code></td><td>⚠️ во flaky-тесте есть гонка, <code>-race</code> иногда краснеет</td></tr></tbody></table></div>
+<p>Скилы для ИИ-агентов в <code>.agents/skills/</code>: <code>go-senior-developer</code>, <code>asd-ste100</code>, <code>adk-go-workflow</code> (три стиля workflow, 18 паттернов, шпаргалка API v2.5.0, предохранители, офлайн-тестирование).</p>
+<p>Наши сданные работы: <code>submission/week&lt;N&gt;/day&lt;M&gt;/README.md</code> — там измеренные числа, а не пересказ условий.</p>
+<hr>
+  </section>
+  <section class="panel" id="источники">
+    <h2>11. Источники преподавателя («Рекомендовані джерела» по вебинарам)</h2>
+<h3>W1 — LLMs as a Runtime</h3>
+<p><a href="https://adk.dev/2.0/">adk.dev/2.0/</a> <a href="https://github.com/google/adk-go">github.com/google/adk-go</a> <a href="https://ollama.com">ollama.com</a> <a href="https://agentgateway.dev">agentgateway.dev</a> <a href="https://developers.openai.com/api/docs/guides/migrate-to-responses">developers.openai.com/api/docs/guides/migrate-to-responses</a>  (Migrate to the Responses API) <a href="https://arena.ai/leaderboard/agent">arena.ai/leaderboard/agent</a>  (LMArena) <a href="https://artificialanalysis.ai">artificialanalysis.ai</a>  (порівняння моделей) <a href="https://www.anthropic.com/research/building-effective-agents">www.anthropic.com/research/building-effective-agents</a> <a href="https://huyenchip.com/2025/01/07/agents.html">huyenchip.com/2025/01/07/agents.html</a>  (Chip Huyen — Agents) <a href="https://simonwillison.net">simonwillison.net</a> youtu.be/Mzr7byMFy_4  (Graph Engineering with ADK) КНИГИ: Chip Huyen «AI Engineering» (O&#x27;Reilly, 2025); Antonio Gulli «Agentic Design Patterns» (2025)</p>
+<h3>W2 — Typed Outputs, Function Calls, Tool Contracts</h3>
+<p><a href="https://landscape.aaif.io">landscape.aaif.io</a> <a href="https://platform.openai.com/docs/guides/structured-outputs">platform.openai.com/docs/guides/structured-outputs</a> <a href="https://docs.anthropic.com/en/docs/build-with-claude/tool-use">docs.anthropic.com/en/docs/build-with-claude/tool-use</a> <a href="https://modelcontextprotocol.io">modelcontextprotocol.io</a> <a href="https://github.com/dimetron/mono-go-mcp">github.com/dimetron/mono-go-mcp</a> <a href="https://ai.google.dev/gemini-api/docs/function-calling">ai.google.dev/gemini-api/docs/function-calling</a> <a href="https://ai.google.dev/gemini-api/docs/structured-output">ai.google.dev/gemini-api/docs/structured-output</a> <a href="https://arxiv.org/pdf/2608.06790">arxiv.org/pdf/2608.06790</a>  (AgentChaos: Chaos Engineering for Agent Systems) <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">www.anthropic.com/engineering/writing-tools-for-agents</a> <a href="https://openai.com/index/introducing-structured-outputs-in-the-api">openai.com/index/introducing-structured-outputs-in-the-api</a> <a href="https://cookbook.openai.com">cookbook.openai.com</a> <a href="https://eugeneyan.com/writing/llm-patterns/">eugeneyan.com/writing/llm-patterns/</a> ВІДЕО: The Future of MCP; AGNTCon + MCPCon Europe</p>
+<h3>W3 — Agent Anatomy in Go ADK</h3>
+<p><a href="https://google.github.io/adk-docs/">google.github.io/adk-docs/</a> <a href="https://github.com/google/adk-go">github.com/google/adk-go</a> <a href="https://pkg.go.dev/google.golang.org/adk/v2">pkg.go.dev/google.golang.org/adk/v2</a> <a href="https://github.com/google/adk-go/tree/main/examples/workflow">github.com/google/adk-go/tree/main/examples/workflow</a> <a href="https://github.com/google/adk-go/blob/main/README-v2.md">github.com/google/adk-go/blob/main/README-v2.md</a> <a href="https://modelcontextprotocol.io">modelcontextprotocol.io</a> <a href="https://www.anthropic.com/research/building-effective-agents">www.anthropic.com/research/building-effective-agents</a> <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">www.anthropic.com/engineering/writing-tools-for-agents</a> <a href="https://www.kaggle.com/whitepaper-agent-tools-and-interoperability">www.kaggle.com/whitepaper-agent-tools-and-interoperability</a> <a href="https://genai.owasp.org/llm-top-10/">genai.owasp.org/llm-top-10/</a> <a href="https://developers.googleblog.com/build-zero-trust-ai-agents-with-googles-agent-development-kit">developers.googleblog.com/build-zero-trust-ai-agents-with-googles-agent-development-kit</a></p>
+<h3>W4 — Ship the Agent (один бінарник, одна межа)</h3>
+<p><a href="https://google.github.io/adk-docs/deploy/">google.github.io/adk-docs/deploy/</a> <a href="https://docs.docker.com/build/building/multi-stage/">docs.docker.com/build/building/multi-stage/</a> <a href="https://12factor.net">12factor.net</a> <a href="https://cloud.google.com/run/docs">cloud.google.com/run/docs</a> <a href="https://agentgateway.dev">agentgateway.dev</a> <a href="https://kagent.dev">kagent.dev</a> <a href="https://www.solo.io/blog/is-a-pod-the-right-deployment-unit-for-an-ai-agent">www.solo.io/blog/is-a-pod-the-right-deployment-unit-for-an-ai-agent</a> <a href="https://github.com/humanlayer/12-factor-agents">github.com/humanlayer/12-factor-agents</a> <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/">opentelemetry.io/docs/specs/semconv/gen-ai/</a> <a href="https://a2a-protocol.org/latest/specification/">a2a-protocol.org/latest/specification/</a> ВІДЕО: ADK Course #4 (Run ADK Agents 4 ways); ADK Course #6 (Deploy to Cloud Run);        Prototype to Production with ADK; Go 1.25 CPU throttling (lightning talk)</p>
+<h3>W5 — Від PDF до графа знань</h3>
+<p><a href="https://github.com/docling-project/docling">github.com/docling-project/docling</a> · <a href="https://docling-project.github.io/docling/">docling-project.github.io/docling/</a> <a href="https://github.com/unidoc/unipdf">github.com/unidoc/unipdf</a> · <a href="https://github.com/pdfcpu/pdfcpu">github.com/pdfcpu/pdfcpu</a> · <a href="https://unstructured.io">unstructured.io</a> <a href="https://github.com/opendatalab/OmniDocBench">github.com/opendatalab/OmniDocBench</a> · <a href="https://github.com/datalab-to/marker">github.com/datalab-to/marker</a> <a href="https://arxiv.org/abs/2404.16130">arxiv.org/abs/2404.16130</a>  (Microsoft GraphRAG — From Local to Global) <a href="https://arxiv.org/abs/2409.04701">arxiv.org/abs/2409.04701</a>  (Jina AI — Late Chunking) <a href="https://www.anthropic.com/news/contextual-retrieval">www.anthropic.com/news/contextual-retrieval</a> <a href="https://neo4j.com/blog/genai/what-is-graphrag/">neo4j.com/blog/genai/what-is-graphrag/</a> <a href="https://neo4j.com/labs/agent-memory/explanation/resolution-deduplication/">neo4j.com/labs/agent-memory/explanation/resolution-deduplication/</a> <a href="https://neo4j.com/knowledge-graphs-practitioners-guide/">neo4j.com/knowledge-graphs-practitioners-guide/</a>  (безкоштовна книга) <a href="https://jessicatalisman.substack.com/p/knowledge-management-is-the-vibe">jessicatalisman.substack.com/p/knowledge-management-is-the-vibe</a></p>
+<h3>W6 — Agentic GraphRAG</h3>
+<p><a href="https://github.com/google/adk-go/tree/main/examples/workflow/complex">github.com/google/adk-go/tree/main/examples/workflow/complex</a> <a href="https://docs.cohere.com/docs/rerank-overview">docs.cohere.com/docs/rerank-overview</a> · huggingface.co/BAAI/bge-reranker-v2-m3 <a href="https://docs.ragas.io">docs.ragas.io</a> · <a href="https://github.com/pgvector/pgvector">github.com/pgvector/pgvector</a> · <a href="https://github.com/microsoft/graphrag">github.com/microsoft/graphrag</a> <a href="https://github.com/zilliztech/GPTCache">github.com/zilliztech/GPTCache</a> <a href="https://hamel.dev">hamel.dev</a>  («Stop Saying RAG Is Dead», «&quot;It&#x27;s Hard to Eval&quot; Is a Product Smell») <a href="https://weaviate.io/blog/retrieval-quality-rag-overview">weaviate.io/blog/retrieval-quality-rag-overview</a> · <a href="https://weaviate.io/blog/hybrid-search-explained">weaviate.io/blog/hybrid-search-explained</a> <a href="https://www.pinecone.io/learn/">www.pinecone.io/learn/</a> · <a href="https://eugeneyan.com">eugeneyan.com</a> · jxnl.co/writing/ · nlp.stanford.edu/IR-book/ КНИГИ: Huyen «AI Engineering»; Lakshmanan «Generative AI Design Patterns»;        Manning/Raghavan/Schütze «Introduction to Information Retrieval» (безкоштовно);        Grainger/Turnbull/Irwin «AI-Powered Search»</p>
+<h3>W7 — ReAct як система управління</h3>
+<p><a href="https://arxiv.org/abs/2210.03629">arxiv.org/abs/2210.03629</a>  (ReAct) · <a href="https://arxiv.org/abs/2201.11903">arxiv.org/abs/2201.11903</a>  (Chain-of-Thought) <a href="https://github.com/google/adk-go/tree/main/examples/workflow/dynamic">github.com/google/adk-go/tree/main/examples/workflow/dynamic</a> <a href="https://www.anthropic.com/research/building-effective-agents">www.anthropic.com/research/building-effective-agents</a> <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">www.anthropic.com/engineering/effective-context-engineering-for-ai-agents</a> <a href="https://lilianweng.github.io/posts/2023-06-23-agent/">lilianweng.github.io/posts/2023-06-23-agent/</a> <a href="https://openai.com/index/harness-engineering/">openai.com/index/harness-engineering/</a> <a href="https://github.com/cobusgreyling/loop-engineering">github.com/cobusgreyling/loop-engineering</a> <a href="https://datasciencedojo.com/blog/agentic-loops-explained-from-react-to-loop-engineering-2026-guide">datasciencedojo.com/blog/agentic-loops-explained-from-react-to-loop-engineering-2026-guide</a> tianpan.co/blog/2026-04-10-parallel-tool-calls-hidden-coupling <a href="https://www.motomtech.com/blog-post/ai-agent-retries-idempotency-tool-failures">www.motomtech.com/blog-post/ai-agent-retries-idempotency-tool-failures</a></p>
+<h3>W8 — Відмови інструментів, guardrails, lethal trifecta</h3>
+<p><a href="https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/">simonwillison.net/2025/Jun/16/the-lethal-trifecta/</a>  ← ключове <a href="https://simonwillison.net/series/prompt-injection/">simonwillison.net/series/prompt-injection/</a> <a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/</a> <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">www.anthropic.com/engineering/writing-tools-for-agents</a> <a href="https://martinfowler.com/bliki/CircuitBreaker.html">martinfowler.com/bliki/CircuitBreaker.html</a> <a href="https://modelcontextprotocol.io/extensions/tasks/overview">modelcontextprotocol.io/extensions/tasks/overview</a>  (MCP Tasks, 2026-07-28) <a href="https://earendil.com/posts/pi-1-0/">earendil.com/posts/pi-1-0/</a> · <a href="https://github.com/earendil-works/pi">github.com/earendil-works/pi</a> (pi-durable) <a href="https://tailscale.com/blog/aperture-lethal-trifecta">tailscale.com/blog/aperture-lethal-trifecta</a> <a href="https://blog.crewai.com/youre-building-agent-security-in-the-wrong-order/">blog.crewai.com/youre-building-agent-security-in-the-wrong-order/</a> <a href="https://greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions">greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions</a> <a href="https://temporal.io/blog/introducing-deputy">temporal.io/blog/introducing-deputy</a> КНИГИ: Albada «Building Applications with AI Agents»; Nygard «Release It!» (circuit breakers)</p>
+<h3>W9 — Памʼять, event-sourced стан, context engineering</h3>
+<p><a href="https://google.github.io/adk-docs/sessions/">google.github.io/adk-docs/sessions/</a> <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md">github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md</a>  (OKF v0.2) <a href="https://gist.github.com/karpathy">gist.github.com/karpathy</a>  (LLM Wiki) <a href="https://arxiv.org/abs/2310.08560">arxiv.org/abs/2310.08560</a>  (MemGPT) · <a href="https://docs.letta.com">docs.letta.com</a> · <a href="https://agentskills.io/specification">agentskills.io/specification</a> <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">www.anthropic.com/engineering/effective-context-engineering-for-ai-agents</a> <a href="https://blog.langchain.com/context-engineering-for-agents/">blog.langchain.com/context-engineering-for-agents/</a> <a href="https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html">www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html</a> <a href="https://martinfowler.com/eaaDev/EventSourcing.html">martinfowler.com/eaaDev/EventSourcing.html</a> · <a href="https://letta.com/blog/context-repositories">letta.com/blog/context-repositories</a> КНИГА: Kleppmann «Designing Data-Intensive Applications» — <a href="https://dataintensive.net">dataintensive.net</a></p>
+<h3>W10 — Команди агентів, human approval, write-safe</h3>
+<p><a href="https://google.github.io/adk-docs/agents/multi-agents/">google.github.io/adk-docs/agents/multi-agents/</a> · <a href="https://a2a-protocol.org">a2a-protocol.org</a> · <a href="https://docs.temporal.io">docs.temporal.io</a> <a href="https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/">langchain-ai.github.io/langgraph/concepts/human_in_the_loop/</a> <a href="https://arxiv.org/abs/2503.13657">arxiv.org/abs/2503.13657</a>  (Why Do Multi-Agent LLM Systems Fail?)  ← ключове <a href="https://www.anthropic.com/engineering/built-multi-agent-research-system">www.anthropic.com/engineering/built-multi-agent-research-system</a> <a href="https://cognition.ai/blog/dont-build-multi-agents">cognition.ai/blog/dont-build-multi-agents</a>  ← протилежна позиція, читати разом <a href="https://temporal.io/blog/manetu-the-thread-is-the-workflow">temporal.io/blog/manetu-the-thread-is-the-workflow</a></p>
+<h3>W11 — Динамічні субагенти і multi-critic</h3>
+<p><a href="https://a2a-protocol.org">a2a-protocol.org</a> · <a href="https://github.com/google/adk-go/tree/main/examples/a2a">github.com/google/adk-go/tree/main/examples/a2a</a> <a href="https://adk.dev/workflows/collaboration/">adk.dev/workflows/collaboration/</a> · <a href="https://google.github.io/adk-docs/agents/workflow-agents/">google.github.io/adk-docs/agents/workflow-agents/</a> <a href="https://github.com/google/adk-go/tree/main/examples/workflow/dynamic">github.com/google/adk-go/tree/main/examples/workflow/dynamic</a> <a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk">www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk</a> <a href="https://github.com/SWE-agent/SWE-agent">github.com/SWE-agent/SWE-agent</a> <a href="https://www.langchain.com/blog/3-years-of-graph-engineering-with-langgraph">www.langchain.com/blog/3-years-of-graph-engineering-with-langgraph</a> <a href="https://hamel.dev/blog/posts/evals/">hamel.dev/blog/posts/evals/</a>  (Your AI Product Needs Evals) <a href="https://arxiv.org/abs/2306.05685">arxiv.org/abs/2306.05685</a>  (Judging LLM-as-a-Judge) <a href="https://arxiv.org/abs/2303.11366">arxiv.org/abs/2303.11366</a>  (Reflexion) <a href="https://linuxfoundation.org">linuxfoundation.org</a> — A2A protocol, перший рік</p>
+<h3>W12 — Autoresearch і самополіпшення під бюджет</h3>
+<p><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a>  ← референс патерну <a href="https://github.com/karpathy/nanochat">github.com/karpathy/nanochat</a> <a href="https://kagent.dev">kagent.dev</a> · <a href="https://github.com/kubernetes-sigs/agent-sandbox">github.com/kubernetes-sigs/agent-sandbox</a> <a href="https://e2b.dev">e2b.dev</a> · <a href="https://gvisor.dev">gvisor.dev</a> · <a href="https://firecracker-microvm.github.io">firecracker-microvm.github.io</a>   ← три рівні ізоляції <a href="https://deepmind.google">deepmind.google</a> — AlphaEvolve <a href="https://arxiv.org/abs/2505.22954">arxiv.org/abs/2505.22954</a>  (Darwin Gödel Machine) · <a href="https://sakana.ai/dgm/">sakana.ai/dgm/</a> <a href="https://lilianweng.github.io/posts/2026-07-04-harness/">lilianweng.github.io/posts/2026-07-04-harness/</a>  (Harness Engineering) <a href="https://cobusgreyling.substack.com/p/loop-engineering">cobusgreyling.substack.com/p/loop-engineering</a> <a href="https://fortune.com">fortune.com</a> — «The Karpathy Loop» shopify.engineering/autoresearch · <a href="https://www.kaggle.com/whitepaper-agent-quality">www.kaggle.com/whitepaper-agent-quality</a></p>
+  </section>
+<footer>
+  Конспект собран 08.11.2026 из материалов платформы Prometheus, репозитория курса
+  и собственных 12 работ. Плоская версия для ИИ-агента — <code>notes/COURSE-NOTES.md</code>.
+</footer>
+</div>
+<script>
+  const go = id => {
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===id));
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
+    if(location.hash.slice(1)!==id) history.replaceState(null,'','#'+id);
+    window.scrollTo({top:0});
+  };
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>go(b.dataset.t));
+  if(location.hash && document.getElementById(location.hash.slice(1))) go(location.hash.slice(1));
+</script>
